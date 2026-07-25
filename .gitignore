@@ -1,0 +1,28 @@
+# Virtual environment
+.venv/
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+
+# Test, type-checking, linting, and coverage output
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Python build and package metadata
+build/
+dist/
+*.egg-info/
+
+# Local secrets and environment settings
+.env
+.venv
+.venv.*
+!.venv.example
+
+# Local editor settings
+.vscode/
+.idea/

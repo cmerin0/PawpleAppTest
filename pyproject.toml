@@ -1,0 +1,78 @@
+# This section tells Python which tool builds/install this project.
+# `setuptools` is the packaging tool that lets pip install this project.
+[build-system]
+requires = ["setuptools>=75"]                   # Pip must install setuptools before it can install this project. 
+build-backend = "setuptools.build_meta"         # This identifies the setuptools component responsible for building the package.
+
+# Find added because setuptools automatically found two top-level folders so we had to specify 
+# Include app and future packages inside it.  Exclude alembic and tests from the installed application. Only recognize folders with __init__.py as packages
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["alembic*", "tests*"]
+namespaces = false
+
+# This section describes the actual Pawple API project.
+[project]
+name = "pawple-api"                             # The internal package/project name shown by pip.
+version = "0.1.0"                               # The project version. Start small and update it when you make releases.
+description = "Pawple pet adoption API"         # A short human-readable description of the project.
+requires-python = ">=3.12"                      # Pip will refuse installation on an older Python version.
+
+# These are runtime dependencies: the API needs them to start and work.
+dependencies = [
+    "alembic>=1.14,<2",                         # Alembic manages database schema changes through migration files.
+    "fastapi>=0.115,<1",                        # FastAPI is the framework used to create HTTP endpoints.
+    "psycopg[binary]>=3.2,<4",                  # Psycopg is the PostgreSQL driver.
+    "pydantic-settings>=2.6,<3",                # Lets FastAPI load configuration safely from environment variables.
+    "sqlalchemy>=2.0,<3",                       # SQLAlchemy defines database models and safely queries PostgreSQL.
+    "uvicorn[standard]>=0.32,<1",               # Uvicorn runs the FastAPI application locally.
+    "pwdlib[argon2]>=0.2,<1",                   # (Added Later) Converts a plain-text password into a one-way password hash
+    "email-validator>=2.2,<3",                  # (Added Later) Validates email
+]
+
+
+# These dependencies are useful while developing, but are not required
+# for the deployed API to run.
+[project.optional-dependencies]
+
+# `dev` is the name of this optional dependency group.
+# The command `python -m pip install -e ".[dev]"` installs:
+# - the Pawple API itself
+# - all runtime dependencies above
+# - all development dependencies below
+dev = [
+    "httpx>=0.28,<1",                           # Lets tests send requests to FastAPI without requiring a separate server.
+    "mypy>=1.13,<2",                            # Checks whether Python types are used consistently.
+    "pytest>=8.3,<9",                           # The test framework for API, service, and database tests.
+    "pytest-cov>=6,<7",                         # Measures how much of the application code is exercised by tests.
+    "ruff>=0.8,<1",                             # Checks formatting, common mistakes, imports, and modern Python patterns.
+]
+
+
+# Settings specifically for pytest.
+[tool.pytest.ini_options]
+testpaths = ["tests"]                           # Pytest should look for tests inside the `tests/` folder.
+addopts = "-q"                                  # `-q` means quiet output: concise test results in the terminal.
+
+
+# Settings specifically for Ruff.
+[tool.ruff]
+line-length = 100                               # Maximum preferred line length for Python files.
+target-version = "py312"                        # Tell Ruff that the project targets Python 3.12 syntax and features.
+
+
+# Choose the groups of code-quality checks Ruff should run.
+[tool.ruff.lint]
+# E  = common Python style and syntax problems
+# F  = likely programming errors, such as unused imports
+# I  = import ordering problems
+# B  = common bug-prone patterns
+# UP = suggestions to use modern Python syntax
+select = ["E", "F", "I", "B", "UP"]
+
+
+# Settings specifically for Mypy.
+[tool.mypy]
+python_version = "3.12"                         # Check the project as Python 3.12 code.
+strict = true                                   # Require explicit and consistent type annotations where Mypy expects them.
+packages = ["app"]                              # The Python package that Mypy should check.
