@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # Define a settings model whose values can be loaded from environment
     # variables and validated according to their type annotations.
 
-    # Require a string named DATABASE_URL (or database_url) in the environment or .env file; 
+    # Require a string named DATABASE_URL (or database_url) in the environment or .env file;
     # Pydantic reads it into this Python attribute.
     database_url: str
     test_database_url: str | None = None
@@ -26,12 +26,13 @@ class Settings(BaseSettings):
     )
 
 
-# Cache the function result so every caller receives the same Settings object 
+# Cache the function result so every caller receives the same Settings object
 # instead of repeatedly reading and validating configuration.
 @lru_cache
 def get_settings() -> Settings:
     # Construct and return the validated application settings.
-    return Settings()  # type: ignore[call-arg] 
+    return Settings()  # type: ignore[call-arg]
+
 
 # Load the cached settings once when this module is imported for convenient use elsewhere
 # for example as `settings.database_url`.

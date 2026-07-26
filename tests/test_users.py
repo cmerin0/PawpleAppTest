@@ -140,7 +140,7 @@ def test_login_rejects_invalid_password(client) -> None:
     assert response.json() == {"detail": "Incorrect email or password."}
 
 
-# Test that the current-user endpoint requires authentication 
+# Test that the current-user endpoint requires authentication
 # and returns the authenticated user's account.
 def test_get_current_user_requires_token(client) -> None:
 
@@ -150,7 +150,7 @@ def test_get_current_user_requires_token(client) -> None:
     assert response.json() == {"detail": "Could not validate authentication credentials."}
 
 
-# Test that the current-user endpoint returns the authenticated user's account 
+# Test that the current-user endpoint returns the authenticated user's account
 # when provided with a valid token.
 def test_get_current_user_returns_authenticated_account(client) -> None:
     # A valid token should return the matching account.

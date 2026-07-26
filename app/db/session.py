@@ -24,6 +24,6 @@ def get_database_session() -> Generator[Session, None, None]:
     database_session = SessionLocal()
     try:
         # gives the session to endpoint; finally closes it even if error occurs.
-        yield database_session  
+        yield database_session
     finally:
         database_session.close()
