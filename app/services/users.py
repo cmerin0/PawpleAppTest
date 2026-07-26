@@ -4,8 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models.entities import User
+from app.schemas.auth import LoginRequest
 from app.schemas.users import UserCreate, UserUpdate
 
 
@@ -58,3 +59,22 @@ def delete_user(database_session: Session, user: User) -> None:
     """Permanently remove a user."""
     database_session.delete(user)
     database_session.commit()
+
+
+def get_user_by_email(database_session: Session, email: str) -> User | None:
+    """Return one user by email address, or None when it does not exist."""
+    statement = select(User).where(User.email == email)
+    return database_session.scalar(statement)
+
+
+def authenticate_user(database_session: Session, login_data: LoginRequest) -> User | None:
+    """Return the user when credentials are valid, otherwise None."""
+    user = get_user_by_email(database_session, str(login_data.email).lower())
+
+    if user is None:
+        return None
+
+    if not verify_password(login_data.password, user.password_hash):
+        return None
+
+    return user

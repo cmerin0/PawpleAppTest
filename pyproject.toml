@@ -28,6 +28,7 @@ dependencies = [
     "uvicorn[standard]>=0.32,<1",               # Uvicorn runs the FastAPI application locally.
     "pwdlib[argon2]>=0.2,<1",                   # (Added Later) Converts a plain-text password into a one-way password hash
     "email-validator>=2.2,<3",                  # (Added Later) Validates email
+    "PyJWT>=2.10,<3",                           # (Added Later) JWT helps us authentication by tokens
 ]
 
 
@@ -41,7 +42,7 @@ dependencies = [
 # - all runtime dependencies above
 # - all development dependencies below
 dev = [
-    "httpx>=0.28,<1",                           # Lets tests send requests to FastAPI without requiring a separate server.
+    "httpx2>=2.7,<3",                           # This was added later in order to ommit test warning
     "mypy>=1.13,<2",                            # Checks whether Python types are used consistently.
     "pytest>=8.3,<9",                           # The test framework for API, service, and database tests.
     "pytest-cov>=6,<7",                         # Measures how much of the application code is exercised by tests.

@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 
+from app.api.routes.auth import router as auth_router
 from app.api.routes.users import router as users_router
+
 
 def create_application() -> FastAPI:
     """Create and configure the Pawple API application."""
@@ -10,9 +12,11 @@ def create_application() -> FastAPI:
         description="API for Pawple, a pet-adoption platform.",
     )
 
-    application.include_router(users_router, prefix="/api/v1",)
+    application.include_router(users_router, prefix="/api/v1")
+    application.include_router(auth_router, prefix="/api/v1")
 
     return application
+
 
 # Create the FastAPI application instance.
 app = create_application()

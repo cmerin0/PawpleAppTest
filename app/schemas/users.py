@@ -10,15 +10,15 @@ class UserCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
-    display_name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=4, max_length=24)
+    display_name: str = Field(min_length=4, max_length=24)
 
 
 class UserUpdate(BaseModel):
     """Data an existing user may change through the general update endpoint."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-    
+
     display_name: str | None = Field(default=None, min_length=1, max_length=120)
 
 

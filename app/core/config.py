@@ -1,27 +1,38 @@
-from functools import lru_cache # Import Python's cache decorator so settings are created only once.
+from functools import (
+    lru_cache,  # Import Python's cache decorator so settings are created only once.
+)
 
 # Import the base class used to define typed settings and the helper used to
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     # Define a settings model whose values can be loaded from environment
     # variables and validated according to their type annotations.
 
-    # Require a string named DATABASE_URL (or database_url) in the environment or .env file; Pydantic reads it into this Python attribute.
+    # Require a string named DATABASE_URL (or database_url) in the environment or .env file; 
+    # Pydantic reads it into this Python attribute.
     database_url: str
+    test_database_url: str | None = None
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
 
     # Configure the settings model's environment-file and extra-value behavior.
     model_config = SettingsConfigDict(
-        env_file=".env",            # Load additional environment values from the .env file in the current working directory.
+        env_file=".env",  # Load additional environment values from the .env file.
         env_file_encoding="utf-8",  # Decode the .env file using UTF-8.
-        extra="ignore",             # Ignore any extra values in the environment that are not defined in this model.
+        extra="ignore",  # Ignore any extra values in the environment that are not defined here.
     )
 
 
-# Cache the function result so every caller receives the same Settings object instead of repeatedly reading and validating configuration.
+# Cache the function result so every caller receives the same Settings object 
+# instead of repeatedly reading and validating configuration.
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()   # Construct and return the validated application settings.
+    # Construct and return the validated application settings.
+    return Settings()  # type: ignore[call-arg] 
 
-# Load the cached settings once when this module is imported for convenient use elsewhere, for example as `settings.database_url`.
+# Load the cached settings once when this module is imported for convenient use elsewhere
+# for example as `settings.database_url`.
 settings = get_settings()
