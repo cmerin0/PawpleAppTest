@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 from app.db.session import get_database_session
 from app.main import app
-from app.models.entities import User, Shelter, ShelterMember, Pet
+from app.models.entities import Pet, Shelter, ShelterMember, User
 
 if settings.test_database_url is None:
     raise RuntimeError("TEST_DATABASE_URL must be set before running tests.")

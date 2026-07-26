@@ -18,7 +18,6 @@ from app.services.pets import (
     update_draft_pet,
 )
 
-
 DatabaseSession = Annotated[Session, Depends(get_database_session)]
 
 public_router = APIRouter(
@@ -31,7 +30,8 @@ shelter_router = APIRouter(
     tags=["shelter pets"],
 )
 
-# Public endpoints for listing and reading available pets, 
+
+# Public endpoints for listing and reading available pets,
 # and shelter endpoints for creating, updating, and publishing pets.
 @public_router.get(
     "",
@@ -49,6 +49,7 @@ def list_pets(
     )
 
     return [PetRead.model_validate(pet) for pet in pets]
+
 
 # read_pet retrieves a single pet by its ID, but only if it is currently available for adoption.
 @public_router.get(
@@ -73,6 +74,7 @@ def read_pet(
 
     return PetRead.model_validate(pet)
 
+
 # Shelter endpoints for creating, updating, and publishing pets,
 # which require the user to have a shelter membership with owner or manager role.
 @shelter_router.post(
@@ -93,6 +95,7 @@ def create_shelter_pet(
     )
 
     return PetRead.model_validate(pet)
+
 
 # update_shelter_pet updates the details of a draft pet belonging to the current shelter,
 # but only if the pet is still in the draft state.
@@ -131,8 +134,10 @@ def update_shelter_pet(
 
     return PetRead.model_validate(updated_pet)
 
-# publish_shelter_pet transitions a draft pet to the available state, making it publicly discoverable,
-# but only if the pet belongs to the current shelter and is still in the draft state.
+
+# publish_shelter_pet transitions a draft pet to the available state, 
+# making it publicly discoverable, but only if pet belongs to the current shelter 
+# and is still in the draft state. 
 @shelter_router.post(
     "/{pet_id}/publish",
     response_model=PetRead,

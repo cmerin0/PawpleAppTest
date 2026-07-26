@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
@@ -15,9 +15,11 @@ class PetNotFoundError(Exception):
 class PetStateConflictError(Exception):
     """Raised when a Pet cannot transition from its current status."""
 
-# Functions for managing Pet entities in the database, 
-# including creation, retrieval, updating, and publishing of pet listings. 
+
+# Functions for managing Pet entities in the database,
+# including creation, retrieval, updating, and publishing of pet listings.
 # These functions enforce business rules such as ownership and status transitions.
+
 
 # create_pet creates a new draft Pet for a specific Shelter,
 def create_pet(
@@ -45,6 +47,7 @@ def create_pet(
 
     return pet
 
+
 # get_shelter_pet retrieves a Pet by its ID, ensuring it belongs to the specified Shelter.
 def get_shelter_pet(
     database_session: Session,
@@ -64,6 +67,7 @@ def get_shelter_pet(
 
     return pet
 
+
 # update_draft_pet updates the details of a Pet, but only if it is still in the draft state.
 def update_draft_pet(
     database_session: Session,
@@ -75,15 +79,14 @@ def update_draft_pet(
     if pet.status is not PetStatus.DRAFT:
         raise PetStateConflictError
 
-    for field_name, value in pet_data.model_dump(
-        exclude_unset=True
-    ).items():
+    for field_name, value in pet_data.model_dump(exclude_unset=True).items():
         setattr(pet, field_name, value)
 
     database_session.commit()
     database_session.refresh(pet)
 
     return pet
+
 
 # publish_pet transitions a draft Pet to the available state, making it publicly discoverable.
 def publish_pet(
@@ -96,12 +99,13 @@ def publish_pet(
         raise PetStateConflictError
 
     pet.status = PetStatus.AVAILABLE
-    pet.published_at = datetime.now(timezone.utc)
+    pet.published_at = datetime.now(UTC)
 
     database_session.commit()
     database_session.refresh(pet)
 
     return pet
+
 
 # list_available_pets retrieves a paginated list of Pets that are currently available for adoption.
 def list_available_pets(
@@ -120,6 +124,7 @@ def list_available_pets(
     )
 
     return list(database_session.scalars(statement).all())
+
 
 # get_available_pet retrieves a Pet by its ID, but only if it is currently available for adoption.
 def get_available_pet(

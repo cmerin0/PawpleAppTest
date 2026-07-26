@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from app.models.entities import ShelterMember, ShelterMemberRole
 
 
-# Test the creation of a draft pet listing for a shelter, 
-# ensuring that only users with the appropriate roles can create pets, 
+# Test the creation of a draft pet listing for a shelter,
+# ensuring that only users with the appropriate roles can create pets,
 # and that pets are not publicly visible until published.
 def register_and_login(
     client: TestClient,
@@ -42,6 +42,7 @@ def register_and_login(
         login_response.json()["access_token"],
     )
 
+
 # Helper function to create a shelter for the authenticated user,
 # returning the shelter's details for use in subsequent tests.
 def create_shelter(client: TestClient, token: str) -> dict[str, Any]:
@@ -62,6 +63,7 @@ def create_shelter(client: TestClient, token: str) -> dict[str, Any]:
 
     return response.json()
 
+
 # Helper function to generate a sample payload for creating a pet listing,
 # which can be used in tests to create draft pets for a shelter.
 def pet_payload() -> dict[str, Any]:
@@ -74,6 +76,7 @@ def pet_payload() -> dict[str, Any]:
         "size": "Large",
         "description": "Friendly and energetic.",
     }
+
 
 # Test to ensure that creating a pet listing for a shelter results in a draft pet,
 # and that the pet is not publicly visible until it is published.
@@ -95,6 +98,7 @@ def test_create_pet_creates_draft(client: TestClient) -> None:
     assert response_data["shelter_id"] == shelter["id"]
     assert response_data["status"] == "draft"
     assert response_data["published_at"] is None
+
 
 # Test to ensure that only shelter owners or managers can create pet listings,
 # and that staff members without the appropriate role receive a 403 Forbidden response.
@@ -127,9 +131,8 @@ def test_create_pet_requires_owner_or_manager(
     )
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": "Shelter owner or manager access is required."
-    }
+    assert response.json() == {"detail": "Shelter owner or manager access is required."}
+
 
 # Test to ensure that a draft pet is not publicly visible until it is published,
 # and that once published, the pet can be retrieved from the public listing.
@@ -171,6 +174,7 @@ def test_draft_pet_is_not_public_until_published(client: TestClient) -> None:
     assert read_response.status_code == 200
     assert read_response.json()["id"] == pet_id
 
+
 # Test to ensure that once a pet is published, it cannot be updated,
 # and that attempts to update a published pet result in a 409 Conflict response.
 def test_published_pet_cannot_be_updated(client: TestClient) -> None:
@@ -201,13 +205,12 @@ def test_published_pet_cannot_be_updated(client: TestClient) -> None:
     )
 
     assert update_response.status_code == 409
-    assert update_response.json() == {
-        "detail": "Only draft pets can be updated."
-    }
+    assert update_response.json() == {"detail": "Only draft pets can be updated."}
+
 
 # Test to ensure that a shelter cannot update a pet that belongs to another shelter,
 # and that attempts to do so result in a 404 Not Found response.
-def test_shelter_cannot_update_another_shelters_pet( client: TestClient) -> None:
+def test_shelter_cannot_update_another_shelters_pet(client: TestClient) -> None:
     _, first_token = register_and_login(client)
     create_shelter(client, first_token)
 

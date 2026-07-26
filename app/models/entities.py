@@ -30,6 +30,7 @@ class ShelterMemberRole(StrEnum):
     MANAGER = "manager"
     STAFF = "staff"
 
+
 # Define an enumeration for the lifecycle states of a pet listing.
 class PetStatus(StrEnum):
     DRAFT = "draft"
@@ -37,6 +38,7 @@ class PetStatus(StrEnum):
     PENDING = "pending"
     ADOPTED = "adopted"
     UNAVAILABLE = "unavailable"
+
 
 # The User model represents a registered user in the application.
 class User(Base):
@@ -55,6 +57,12 @@ class User(Base):
     )
 
     shelter_membership: Mapped[ShelterMember | None] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+
+    adopter_profile: Mapped[AdopterProfile | None] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         uselist=False,
@@ -145,7 +153,8 @@ class ShelterMember(Base):
     shelter: Mapped[Shelter] = relationship(back_populates="members")
     user: Mapped[User] = relationship(back_populates="shelter_membership")
 
-# The Pet model represents a pet listing associated with a shelter, 
+
+# The Pet model represents a pet listing associated with a shelter,
 # including details such as name, species, breed, and status.
 class Pet(Base):
     __tablename__ = "pets"
@@ -184,9 +193,7 @@ class Pet(Base):
             name="pet_status",
             native_enum=False,
             create_constraint=True,
-            values_callable=lambda enum_class: [
-                member.value for member in enum_class
-            ],
+            values_callable=lambda enum_class: [member.value for member in enum_class],
         ),
         default=PetStatus.DRAFT,
         server_default=PetStatus.DRAFT.value,
@@ -206,4 +213,40 @@ class Pet(Base):
 
     shelter: Mapped[Shelter] = relationship(
         back_populates="pets",
+    )
+
+
+# The AdopterProfile model represents the optional adopter-specific profile
+# for a User. A User can have only one AdopterProfile.
+class AdopterProfile(Base):
+    __tablename__ = "adopter_profiles"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            name="uq_adopter_profiles_user_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True,
+        default=uuid4,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    phone: Mapped[str | None] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped[User] = relationship(
+        back_populates="adopter_profile",
     )
