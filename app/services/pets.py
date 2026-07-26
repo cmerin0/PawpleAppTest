@@ -2,9 +2,10 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.entities import Pet, PetStatus
+from app.models.entities import Pet, PetDismissal, PetStatus
 from app.schemas.pets import PetCreate, PetUpdate
 
 
@@ -55,7 +56,6 @@ def get_shelter_pet(
     shelter_id: UUID,
     pet_id: UUID,
 ) -> Pet:
-    """Return one Pet only when it belongs to the requesting Shelter."""
     statement = select(Pet).where(
         Pet.id == pet_id,
         Pet.shelter_id == shelter_id,
@@ -113,33 +113,100 @@ def list_available_pets(
     *,
     offset: int,
     limit: int,
+    current_user_id: UUID | None = None,
 ) -> list[Pet]:
-    """Return publicly discoverable Pet listings."""
-    statement = (
-        select(Pet)
-        .where(Pet.status == PetStatus.AVAILABLE)
-        .order_by(Pet.published_at.desc())
-        .offset(offset)
-        .limit(limit)
+    statement = select(Pet).where(
+        Pet.status == PetStatus.AVAILABLE,
     )
+
+    if current_user_id is not None:
+        dismissal_exists = (
+            select(PetDismissal.pet_id)
+            .where(
+                PetDismissal.user_id == current_user_id,
+                PetDismissal.pet_id == Pet.id,
+            )
+            .exists()
+        )
+        statement = statement.where(~dismissal_exists)
+
+    statement = statement.order_by(Pet.published_at.desc()).offset(offset).limit(limit)
 
     return list(database_session.scalars(statement).all())
 
 
-# get_available_pet retrieves a Pet by its ID, but only if it is currently available for adoption.
+# get_available_pet retrieves a Pet by its ID, but only
+# if it is currently available for adoption.
 def get_available_pet(
     database_session: Session,
     *,
     pet_id: UUID,
+    current_user_id: UUID | None = None,
 ) -> Pet:
-    """Return a Pet only when it is publicly available."""
     statement = select(Pet).where(
         Pet.id == pet_id,
         Pet.status == PetStatus.AVAILABLE,
     )
+
+    if current_user_id is not None:
+        dismissal_exists = (
+            select(PetDismissal.pet_id)
+            .where(
+                PetDismissal.user_id == current_user_id,
+                PetDismissal.pet_id == Pet.id,
+            )
+            .exists()
+        )
+        statement = statement.where(~dismissal_exists)
+
     pet = database_session.scalar(statement)
 
     if pet is None:
         raise PetNotFoundError
 
     return pet
+
+
+def dismiss_available_pet(
+    database_session: Session,
+    *,
+    user_id: UUID,
+    pet_id: UUID,
+) -> None:
+    get_available_pet(
+        database_session,
+        pet_id=pet_id,
+    )
+
+    existing_dismissal = database_session.get(
+        PetDismissal,
+        {
+            "user_id": user_id,
+            "pet_id": pet_id,
+        },
+    )
+
+    if existing_dismissal is not None:
+        return
+
+    dismissal = PetDismissal(
+        user_id=user_id,
+        pet_id=pet_id,
+    )
+    database_session.add(dismissal)
+
+    try:
+        database_session.commit()
+    except IntegrityError:
+        database_session.rollback()
+
+        existing_dismissal = database_session.get(
+            PetDismissal,
+            {
+                "user_id": user_id,
+                "pet_id": pet_id,
+            },
+        )
+
+        if existing_dismissal is None:
+            raise

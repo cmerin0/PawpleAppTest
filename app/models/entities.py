@@ -40,6 +40,17 @@ class PetStatus(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+# Define an enumeration for the lifecycle states of an adoption application.
+class AdoptionApplicationStatus(StrEnum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    REVIEWING = "reviewing"
+    CONTACTED = "contacted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    WITHDRAWN = "withdrawn"
+
+
 # The User model represents a registered user in the application.
 class User(Base):
     __tablename__ = "users"
@@ -66,6 +77,19 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
         uselist=False,
+    )
+
+    pet_dismissals: Mapped[list[PetDismissal]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    adoption_applications: Mapped[list[AdoptionApplication]] = relationship(
+        back_populates="applicant",
+    )
+
+    application_status_events: Mapped[list[ApplicationStatusEvent]] = relationship(
+        back_populates="changed_by_user",
     )
 
 
@@ -215,6 +239,15 @@ class Pet(Base):
         back_populates="pets",
     )
 
+    dismissals: Mapped[list[PetDismissal]] = relationship(
+        back_populates="pet",
+        cascade="all, delete-orphan",
+    )
+
+    adoption_applications: Mapped[list[AdoptionApplication]] = relationship(
+        back_populates="pet",
+    )
+
 
 # The AdopterProfile model represents the optional adopter-specific profile
 # for a User. A User can have only one AdopterProfile.
@@ -249,4 +282,165 @@ class AdopterProfile(Base):
 
     user: Mapped[User] = relationship(
         back_populates="adopter_profile",
+    )
+
+
+# The PetDismissal model records that a User is not interested in one Pet.
+# The composite primary key ensures one dismissal per User and Pet.
+class PetDismissal(Base):
+    __tablename__ = "pet_dismissals"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    pet_id: Mapped[UUID] = mapped_column(
+        ForeignKey("pets.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    user: Mapped[User] = relationship(
+        back_populates="pet_dismissals",
+    )
+    pet: Mapped[Pet] = relationship(
+        back_populates="dismissals",
+    )
+
+
+# The AdoptionApplication model records one User's adoption request for one Pet.
+# A User can have only one application per Pet.
+class AdoptionApplication(Base):
+    __tablename__ = "adoption_applications"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "pet_id",
+            "applicant_user_id",
+            name="uq_adoption_applications_pet_applicant",
+        ),
+        Index(
+            "ix_adoption_applications_applicant_status",
+            "applicant_user_id",
+            "status",
+        ),
+        Index(
+            "ix_adoption_applications_pet_status",
+            "pet_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True,
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    pet_id: Mapped[UUID] = mapped_column(
+        ForeignKey("pets.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    applicant_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[AdoptionApplicationStatus] = mapped_column(
+        Enum(
+            AdoptionApplicationStatus,
+            name="adoption_application_status",
+            native_enum=False,
+            create_constraint=True,
+            values_callable=lambda enum_class: [member.value for member in enum_class],
+        ),
+        default=AdoptionApplicationStatus.DRAFT,
+        server_default=AdoptionApplicationStatus.DRAFT.value,
+    )
+    contact_phone: Mapped[str | None] = mapped_column(String(30))
+    message: Mapped[str | None] = mapped_column(Text)
+    consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    pet: Mapped[Pet] = relationship(
+        back_populates="adoption_applications",
+    )
+    applicant: Mapped[User] = relationship(
+        back_populates="adoption_applications",
+    )
+    status_events: Mapped[list[ApplicationStatusEvent]] = relationship(
+        back_populates="application",
+    )
+
+
+# The ApplicationStatusEvent model is an append-only history of application
+# status transitions and the User who made each change.
+class ApplicationStatusEvent(Base):
+    __tablename__ = "application_status_events"
+
+    __table_args__ = (
+        Index(
+            "ix_application_status_events_application_created_at",
+            "application_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True,
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    application_id: Mapped[UUID] = mapped_column(
+        ForeignKey("adoption_applications.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    from_status: Mapped[AdoptionApplicationStatus | None] = mapped_column(
+        Enum(
+            AdoptionApplicationStatus,
+            name="application_status_event_from_status",
+            native_enum=False,
+            create_constraint=True,
+            values_callable=lambda enum_class: [member.value for member in enum_class],
+        ),
+    )
+    to_status: Mapped[AdoptionApplicationStatus] = mapped_column(
+        Enum(
+            AdoptionApplicationStatus,
+            name="application_status_event_to_status",
+            native_enum=False,
+            create_constraint=True,
+            values_callable=lambda enum_class: [member.value for member in enum_class],
+        ),
+        nullable=False,
+    )
+    changed_by_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    application: Mapped[AdoptionApplication] = relationship(
+        back_populates="status_events",
+    )
+    changed_by_user: Mapped[User] = relationship(
+        back_populates="application_status_events",
     )

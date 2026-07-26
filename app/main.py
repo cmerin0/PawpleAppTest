@@ -1,6 +1,10 @@
 from fastapi import FastAPI
 
 from app.api.routes.adopter_profiles import router as adopter_profiles_router
+from app.api.routes.adoption_applications import (
+    applications_router,
+    pet_application_router,
+)
 from app.api.routes.auth import router as auth_router
 from app.api.routes.pets import (
     public_router as pets_router,
@@ -31,6 +35,8 @@ def create_application() -> FastAPI:
     application.include_router(pets_router, prefix=prefix)
     application.include_router(shelter_pets_router, prefix=prefix)
     application.include_router(adopter_profiles_router, prefix=prefix)
+    application.include_router(applications_router, prefix=prefix)
+    application.include_router(pet_application_router, prefix=prefix)
     return application
 
 
