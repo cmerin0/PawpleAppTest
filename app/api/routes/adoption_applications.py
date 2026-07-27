@@ -20,6 +20,7 @@ from app.services.adoption_applications import (
     AdoptionApplicationStateConflictError,
     PetUnavailableForApplicationError,
     approve_application_for_shelter,
+    complete_adoption_for_shelter,
     get_application_for_applicant,
     get_application_for_shelter,
     get_or_create_draft_application,
@@ -28,6 +29,7 @@ from app.services.adoption_applications import (
     submit_application,
     update_application_status_for_shelter,
     update_draft_application,
+    withdraw_application,
 )
 
 applications_router = APIRouter(
@@ -286,4 +288,82 @@ def approve_shelter_application(
             approved_application
         ).model_dump(),
         applicant_display_name=approved_application.applicant.display_name,
+    )
+
+# Withdraw one unapproved application owned by the current User.
+@applications_router.post(
+    "/{application_id}/withdraw",
+    response_model=AdoptionApplicationRead,
+)
+def withdraw_current_users_application(
+    application_id: UUID,
+    current_user: CurrentUser,
+    database_session: DatabaseSession,
+) -> AdoptionApplicationRead:
+    try:
+        application = get_application_for_applicant(
+            database_session,
+            application_id=application_id,
+            applicant=current_user,
+        )
+        withdrawn_application = withdraw_application(
+            database_session,
+            application=application,
+            applicant=current_user,
+        )
+    except AdoptionApplicationNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        ) from error
+    except AdoptionApplicationStateConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This application cannot be withdrawn.",
+        ) from error
+
+    return AdoptionApplicationRead.model_validate(
+        withdrawn_application
+    )
+
+# Mark the approved application's Pet as adopted.
+@shelter_applications_router.post(
+    "/{application_id}/complete-adoption",
+    response_model=ShelterApplicationRead,
+)
+def complete_shelter_adoption(
+    application_id: UUID,
+    approval_data: ShelterApplicationApproval,
+    membership: CurrentShelterManager,
+    database_session: DatabaseSession,
+) -> ShelterApplicationRead:
+    try:
+        completed_application = complete_adoption_for_shelter(
+            database_session,
+            application_id=application_id,
+            shelter_id=membership.shelter_id,
+            membership=membership,
+            note=approval_data.note,
+        )
+    except AdoptionApplicationNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Application not found.",
+        ) from error
+    except AdoptionApplicationStateConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only approved applications can complete an adoption.",
+        ) from error
+    except PetUnavailableForApplicationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This pet is not pending adoption.",
+        ) from error
+
+    return ShelterApplicationRead(
+        **AdoptionApplicationRead.model_validate(
+            completed_application
+        ).model_dump(),
+        applicant_display_name=completed_application.applicant.display_name,
     )

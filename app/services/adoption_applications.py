@@ -56,6 +56,27 @@ def get_or_create_draft_application(
         if application.status is AdoptionApplicationStatus.DRAFT:
             return application
 
+        if application.status is AdoptionApplicationStatus.WITHDRAWN:
+            previous_status = application.status
+
+            application.status = AdoptionApplicationStatus.DRAFT
+            application.consent_at = None
+            application.submitted_at = None
+
+            status_event = ApplicationStatusEvent(
+                application_id=application.id,
+                from_status=previous_status,
+                to_status=AdoptionApplicationStatus.DRAFT,
+                changed_by_user_id=applicant.id,
+                note="Withdrawn application reopened as a draft.",
+            )
+
+            database_session.add(status_event)
+            database_session.commit()
+            database_session.refresh(application)
+
+            return application
+
         raise AdoptionApplicationStateConflictError
 
     application = AdoptionApplication(
@@ -339,6 +360,96 @@ def approve_application_for_shelter(
     )
 
     database_session.add(status_event)
+    database_session.commit()
+    database_session.refresh(application)
+
+    return application
+
+
+# Withdraw one unapproved application without changing the Pet.
+def withdraw_application(
+    database_session: Session,
+    *,
+    application: AdoptionApplication,
+    applicant: User,
+) -> AdoptionApplication:
+    withdrawable_statuses = {
+        AdoptionApplicationStatus.DRAFT,
+        AdoptionApplicationStatus.SUBMITTED,
+        AdoptionApplicationStatus.REVIEWING,
+        AdoptionApplicationStatus.CONTACTED,
+    }
+
+    if application.status not in withdrawable_statuses:
+        raise AdoptionApplicationStateConflictError
+
+    previous_status = application.status
+    application.status = AdoptionApplicationStatus.WITHDRAWN
+
+    status_event = ApplicationStatusEvent(
+        application_id=application.id,
+        from_status=previous_status,
+        to_status=AdoptionApplicationStatus.WITHDRAWN,
+        changed_by_user_id=applicant.id,
+        note="Application withdrawn by applicant.",
+    )
+
+    database_session.add(status_event)
+    database_session.commit()
+    database_session.refresh(application)
+
+    return application
+
+# Complete an approved adoption and mark its Pet as adopted.
+def complete_adoption_for_shelter(
+    database_session: Session,
+    *,
+    application_id: UUID,
+    shelter_id: UUID,
+    membership: ShelterMember,
+    note: str | None,
+) -> AdoptionApplication:
+    application_statement = (
+        select(AdoptionApplication)
+        .join(Pet)
+        .where(
+            AdoptionApplication.id == application_id,
+            Pet.shelter_id == shelter_id,
+        )
+        .with_for_update(of=AdoptionApplication)
+    )
+    application = database_session.scalar(application_statement)
+
+    if application is None:
+        raise AdoptionApplicationNotFoundError
+
+    pet_statement = (
+        select(Pet)
+        .where(Pet.id == application.pet_id)
+        .with_for_update()
+    )
+    pet = database_session.scalar(pet_statement)
+
+    if pet is None:
+        raise AdoptionApplicationNotFoundError
+
+    if application.status is not AdoptionApplicationStatus.APPROVED:
+        raise AdoptionApplicationStateConflictError
+
+    if pet.status is not PetStatus.PENDING:
+        raise PetUnavailableForApplicationError
+
+    pet.status = PetStatus.ADOPTED
+
+    completion_event = ApplicationStatusEvent(
+        application_id=application.id,
+        from_status=AdoptionApplicationStatus.APPROVED,
+        to_status=AdoptionApplicationStatus.APPROVED,
+        changed_by_user_id=membership.user_id,
+        note=note or "Adoption completed; pet marked adopted.",
+    )
+
+    database_session.add(completion_event)
     database_session.commit()
     database_session.refresh(application)
 

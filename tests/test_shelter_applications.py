@@ -65,8 +65,8 @@ def create_submitted_application(
 
     return submit_response.json(), owner_token, shelter["id"]
 
-# test_shelter_member_can_list_submitted_applications checks that a shelter 
-# member can retrieve a list of submitted adoption applications for their shelter.
+# Intent: verify a shelter member can list submitted applications.
+# Ensures: the list endpoint returns applications for that shelter.
 def test_shelter_member_can_list_submitted_applications(
     client: TestClient,
 ) -> None:
@@ -83,8 +83,8 @@ def test_shelter_member_can_list_submitted_applications(
     assert response.json()[0]["status"] == "submitted"
     assert response.json()[0]["applicant_display_name"] == "Test Adopter"
 
-# test_shelter_staff_member_can_list_submitted_applications checks that a shelter
-# staff member can retrieve a list of submitted adoption applications for their shelter.
+# Intent: verify shelter staff can list submitted applications.
+# Ensures: staff receive the same authorized application listing.
 def test_shelter_staff_member_can_list_submitted_applications(
     client: TestClient,
     database_session: Session,
@@ -116,8 +116,8 @@ def test_shelter_staff_member_can_list_submitted_applications(
         application_data["id"]
     ]
 
-# test_shelter_cannot_list_another_shelters_applications checks that a shelter
-# member cannot retrieve adoption applications for a shelter they do not belong to.
+# Intent: verify application listings are isolated by shelter.
+# Ensures: a shelter cannot list another shelter's applications.
 def test_shelter_cannot_list_another_shelters_applications(
     client: TestClient,
 ) -> None:

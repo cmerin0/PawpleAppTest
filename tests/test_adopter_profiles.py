@@ -34,9 +34,8 @@ def register_and_login(
         login_response.json()["access_token"],
     )
 
-
-# Test to create an adopter profile for the authenticated user,
-# ensuring that the profile is created successfully and the response is correct.
+# Intent: verify an authenticated user can create an adopter profile.
+# Ensures: the profile is persisted and returned successfully.
 def test_create_adopter_profile(
     client: TestClient,
 ) -> None:
@@ -53,8 +52,8 @@ def test_create_adopter_profile(
     assert response.json()["phone"] == "512-555-0100"
 
 
-# Test to ensure that creating an adopter profile requires authentication,
-# and returns a 401 Unauthorized error if the user is not authenticated.
+# Intent: verify profile creation requires authentication.
+# Ensures: anonymous profile creation is rejected.
 def test_create_adopter_profile_requires_authentication(
     client: TestClient,
 ) -> None:
@@ -67,8 +66,8 @@ def test_create_adopter_profile_requires_authentication(
     assert response.json() == {"detail": "Could not validate authentication credentials."}
 
 
-# Test to ensure that creating an adopter profile rejects duplicate profiles for the same user,
-# returning a 409 Conflict error if the user already has an adopter profile.
+# Intent: verify a user cannot create more than one adopter profile.
+# Ensures: duplicate profile creation is rejected.
 def test_create_adopter_profile_rejects_duplicate_profile(
     client: TestClient,
 ) -> None:
@@ -93,8 +92,8 @@ def test_create_adopter_profile_rejects_duplicate_profile(
     assert second_response.json() == {"detail": "The current user already has an adopter profile."}
 
 
-# Test to read the current authenticated user's adopter profile,
-# ensuring that the correct profile data is returned.
+# Intent: verify a user can retrieve their current adopter profile.
+# Ensures: the endpoint returns that user's persisted profile.
 def test_read_current_users_adopter_profile(
     client: TestClient,
 ) -> None:
@@ -120,8 +119,8 @@ def test_read_current_users_adopter_profile(
     assert response.json()["phone"] == "512-555-0100"
 
 
-# Test to ensure that reading the current authenticated user's adopter profile
-# returns a 404 Not Found error if the user does not have an adopter profile.
+# Intent: verify profile lookup reports when no profile exists.
+# Ensures: a missing adopter profile returns HTTP 404.
 def test_read_adopter_profile_returns_404_when_missing(
     client: TestClient,
 ) -> None:
@@ -136,8 +135,8 @@ def test_read_adopter_profile_returns_404_when_missing(
     assert response.json() == {"detail": "Adopter profile not found."}
 
 
-# Test to update the current authenticated user's adopter profile,
-# ensuring that the profile is updated successfully and the response is correct.
+# Intent: verify a user can update their adopter profile.
+# Ensures: changed profile fields are persisted and returned.
 def test_update_current_users_adopter_profile(
     client: TestClient,
 ) -> None:

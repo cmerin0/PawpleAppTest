@@ -10,6 +10,8 @@ from tests.test_shelter_applications import create_submitted_application
 
 
 # test shelter owner can move application to reviewing 
+# Intent: verify a shelter owner can advance an application to reviewing.
+# Ensures: the permitted status transition succeeds.
 def test_shelter_owner_can_move_application_to_reviewing(
     client: TestClient,
 ) -> None:
@@ -28,6 +30,8 @@ def test_shelter_owner_can_move_application_to_reviewing(
     assert response.json()["status"] == "reviewing"
 
 
+# Intent: verify ordinary shelter staff cannot change application status.
+# Ensures: unauthorized status changes are rejected.
 def test_shelter_staff_cannot_change_application_status(
     client: TestClient,
     database_session: Session,
@@ -61,6 +65,8 @@ def test_shelter_staff_cannot_change_application_status(
     }
 
 
+# Intent: verify shelter access is isolated between shelters.
+# Ensures: a shelter cannot change another shelter's application.
 def test_shelter_cannot_change_another_shelters_application(
     client: TestClient,
 ) -> None:
@@ -97,6 +103,8 @@ def test_shelter_cannot_change_another_shelters_application(
     assert response.json() == {"detail": "Application not found."}
 
 
+# Intent: verify invalid application status transitions are blocked.
+# Ensures: the API rejects transitions outside the allowed workflow.
 def test_invalid_status_transition_is_rejected(
     client: TestClient,
 ) -> None:
@@ -114,6 +122,8 @@ def test_invalid_status_transition_is_rejected(
     }
 
 
+# Intent: verify rejecting an application does not remove the pet from adoption.
+# Ensures: the pet remains available after rejection.
 def test_rejecting_application_keeps_pet_available(
     client: TestClient,
     database_session: Session,

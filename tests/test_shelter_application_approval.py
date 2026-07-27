@@ -38,6 +38,8 @@ def move_application_to_contacted(
     return application_data, owner_token
 
 
+# Intent: verify approving a contacted application advances its workflow.
+# Ensures: the application is approved, the pet becomes pending, and the event is recorded.
 def test_approving_contacted_application_moves_pet_to_pending(
     client: TestClient,
     database_session: Session,
@@ -74,6 +76,8 @@ def test_approving_contacted_application_moves_pet_to_pending(
     assert latest_event.to_status == AdoptionApplicationStatus.APPROVED
 
 
+# Intent: verify an approved adoption removes the pet from public discovery.
+# Ensures: public list and detail endpoints no longer expose the approved pet.
 def test_approved_pet_is_hidden_from_public_discovery(
     client: TestClient,
 ) -> None:
@@ -99,6 +103,8 @@ def test_approved_pet_is_hidden_from_public_discovery(
     assert read_response.json() == {"detail": "Pet not found."}
 
 
+# Intent: verify approval is only allowed after the application is contacted.
+# Ensures: directly approving a submitted application is rejected with HTTP 409.
 def test_submitted_application_cannot_be_approved_directly(
     client: TestClient,
 ) -> None:

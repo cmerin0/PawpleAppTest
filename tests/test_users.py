@@ -30,8 +30,8 @@ def register_and_login(client):
 
     return (registration_response.json(), login_response.json()["access_token"])
 
-
-# Test that registering a new user creates an account and hashes the password.
+# Intent: verify registration creates an account securely.
+# Ensures: the user is persisted and the password is stored hashed.
 def test_register_user_creates_account_and_hashes_password(client, database_session) -> None:
     response = client.post(
         "/api/v1/users",
@@ -62,8 +62,8 @@ def test_register_user_creates_account_and_hashes_password(client, database_sess
     assert user.password_hash != "test-password"
     assert verify_password("test-password", user.password_hash)
 
-
-# Test that registering a user with an email that already exists returns a 409 Conflict error.
+# Intent: verify registration enforces unique email addresses.
+# Ensures: duplicate email registration is rejected.
 def test_register_user_rejects_duplicate_email(client) -> None:
     user_data = {
         "email": "test@example.com",
@@ -78,8 +78,8 @@ def test_register_user_rejects_duplicate_email(client) -> None:
     assert second_response.status_code == 409
     assert second_response.json() == {"detail": "An account already exists for this email address."}
 
-
-# Test that logging in with valid credentials returns a valid access token.
+# Intent: verify valid credentials can authenticate.
+# Ensures: login returns a usable access token.
 def test_login_returns_valid_access_token(client) -> None:
     registration_response = client.post(
         "/api/v1/users",
@@ -115,8 +115,8 @@ def test_login_returns_valid_access_token(client) -> None:
     # verifying that the token payload contains the correct user ID in the "sub" claim.
     assert token_payload["sub"] == user_id
 
-
-# Test that logging in with an invalid password returns a 401 Unauthorized error.
+# Intent: verify invalid credentials cannot authenticate.
+# Ensures: an incorrect password is rejected.
 def test_login_rejects_invalid_password(client) -> None:
     # Invalid credentials must not authenticate an existing user.
     client.post(
@@ -139,9 +139,8 @@ def test_login_rejects_invalid_password(client) -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "Incorrect email or password."}
 
-
-# Test that the current-user endpoint requires authentication
-# and returns the authenticated user's account.
+# Intent: verify the current-user endpoint requires a token.
+# Ensures: unauthenticated access is rejected.
 def test_get_current_user_requires_token(client) -> None:
 
     response = client.get("/api/v1/users/me")
@@ -149,9 +148,8 @@ def test_get_current_user_requires_token(client) -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "Could not validate authentication credentials."}
 
-
-# Test that the current-user endpoint returns the authenticated user's account
-# when provided with a valid token.
+# Intent: verify a valid token resolves to the authenticated account.
+# Ensures: the endpoint returns the correct user's data.
 def test_get_current_user_returns_authenticated_account(client) -> None:
     # A valid token should return the matching account.
     user_data, token = register_and_login(client)
@@ -162,8 +160,8 @@ def test_get_current_user_returns_authenticated_account(client) -> None:
     assert response.json()["id"] == user_data["id"]
     assert response.json()["email"] == "test@example.com"
 
-
-# Test that an authenticated user can update their own profile.
+# Intent: verify an authenticated user can change their display name.
+# Ensures: the updated display name is persisted and returned.
 def test_update_current_user_updates_display_name(client) -> None:
     # Authenticated users can update their own profile.
     _, token = register_and_login(client)
@@ -177,8 +175,8 @@ def test_update_current_user_updates_display_name(client) -> None:
     assert response.status_code == 200
     assert response.json()["display_name"] == "Enrique Navarro"
 
-
-# Test that an authenticated user can delete their own account.
+# Intent: verify deleting the current account invalidates its access.
+# Ensures: subsequent authenticated requests using that account are rejected.
 def test_delete_current_user_invalidates_access(client) -> None:
 
     _, token = register_and_login(client)

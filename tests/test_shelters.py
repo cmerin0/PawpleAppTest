@@ -33,8 +33,8 @@ def register_and_login(
         login_response.json()["access_token"],
     )
 
-
-# Test to ensure that creating a shelter also creates an owner membership for the user
+# Intent: verify shelter creation establishes ownership.
+# Ensures: the shelter is persisted and its creator receives owner membership.
 def test_create_shelter_creates_owner_membership(client, database_session) -> None:
     user_data, token = register_and_login(client)
 
@@ -72,8 +72,8 @@ def test_create_shelter_creates_owner_membership(client, database_session) -> No
     assert membership is not None
     assert membership.role == ShelterMemberRole.OWNER
 
-
-# Test to ensure that creating a shelter requires authentication
+# Intent: verify shelter creation requires authentication.
+# Ensures: anonymous users cannot create shelters.
 def test_create_shelter_requires_authentication(client) -> None:
     response = client.post(
         "/api/v1/shelters",
@@ -90,10 +90,8 @@ def test_create_shelter_requires_authentication(client) -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "Could not validate authentication credentials."}
 
-
-# Test to ensure that creating a shelter with a duplicate slug is rejected
-# This test checks that the API correctly handles attempts to create a shelter with a slug
-# that already exists in the database, returning a 409 Conflict status code.
+# Intent: verify shelter slugs are unique.
+# Ensures: creating a shelter with an existing slug is rejected.
 def test_create_shelter_rejects_duplicate_slug(
     client,
 ) -> None:
@@ -131,9 +129,8 @@ def test_create_shelter_rejects_duplicate_slug(
     assert second_response.status_code == 409
     assert second_response.json() == {"detail": "A shelter already exists for this slug."}
 
-
-# Test to ensure that a user cannot create multiple shelters
-# if they already have a membership so that the system enforces the one-shelter-per-user rule
+# Intent: verify a user cannot own or join multiple shelters through creation.
+# Ensures: shelter creation is rejected when membership already exists.
 def test_create_shelter_rejects_user_with_existing_membership(client) -> None:
     _, token = register_and_login(client)
 
@@ -171,8 +168,8 @@ def test_create_shelter_rejects_user_with_existing_membership(client) -> None:
     assert second_response.status_code == 409
     assert second_response.json() == {"detail": "A user can belong to only one shelter."}
 
-
-# Test to ensure we get the current user shelter
+# Intent: verify a member can retrieve their current shelter.
+# Ensures: the endpoint returns the shelter associated with the user.
 def test_get_current_users_shelter(client) -> None:
     _, token = register_and_login(client)
 
@@ -204,8 +201,8 @@ def test_get_current_users_shelter(client) -> None:
     assert response.json()["id"] == create_response.json()["id"]
     assert response.json()["slug"] == "austin-animal-rescue"
 
-
-# Test to ensure that getting the current user's shelter requires authentication
+# Intent: verify current-shelter lookup requires authentication.
+# Ensures: anonymous requests are rejected.
 def test_get_current_users_shelter_requires_authentication(
     client,
 ) -> None:
@@ -214,9 +211,8 @@ def test_get_current_users_shelter_requires_authentication(
     assert response.status_code == 401
     assert response.json() == {"detail": "Could not validate authentication credentials."}
 
-
-# Test to ensure that getting the current user's shelter returns a 404
-# if the user does not belong to a shelter
+# Intent: verify current-shelter lookup handles users without membership.
+# Ensures: users with no shelter receive HTTP 404.
 def test_get_current_users_shelter_returns_404_without_membership(
     client,
 ) -> None:

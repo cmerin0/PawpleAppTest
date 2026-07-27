@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.entities import Pet, PetStatus
 from tests.test_pets import create_shelter, pet_payload, register_and_login
 
-
+# 
 def create_available_pet(
     client: TestClient,
 ) -> tuple[dict[str, Any], str]:
@@ -34,6 +34,8 @@ def create_available_pet(
     return publish_response.json(), owner_token
 
 
+# Intent: verify an authenticated user can dismiss an available pet.
+# Ensures: the dismissal succeeds without changing the pet's availability.
 def test_authenticated_user_can_dismiss_available_pet(
     client: TestClient,
     database_session: Session,
@@ -59,6 +61,8 @@ def test_authenticated_user_can_dismiss_available_pet(
     assert pet.status == PetStatus.AVAILABLE
 
 
+# Intent: verify dismissing the same pet more than once is harmless.
+# Ensures: repeated dismissal requests remain successful and idempotent.
 def test_repeated_pet_dismissal_is_safe(
     client: TestClient,
 ) -> None:
@@ -85,6 +89,8 @@ def test_repeated_pet_dismissal_is_safe(
     assert second_response.status_code == 204
 
 
+# Intent: verify a dismissal is private to the user who made it.
+# Ensures: the pet is hidden from that user but remains publicly discoverable.
 def test_dismissed_pet_is_hidden_only_from_dismissing_user(
     client: TestClient,
 ) -> None:
@@ -129,6 +135,8 @@ def test_dismissed_pet_is_hidden_only_from_dismissing_user(
     assert anonymous_read_response.json()["id"] == pet_data["id"]
 
 
+# Intent: verify draft pets cannot be dismissed before publication.
+# Ensures: the API treats an unpublished pet as unavailable for dismissal.
 def test_draft_pet_cannot_be_dismissed(
     client: TestClient,
 ) -> None:
@@ -152,6 +160,8 @@ def test_draft_pet_cannot_be_dismissed(
     assert response.json() == {"detail": "Pet not found."}
 
 
+# Intent: verify pet dismissal requires an authenticated requester.
+# Ensures: unauthenticated requests are rejected with HTTP 401.
 def test_pet_dismissal_requires_authentication(
     client: TestClient,
 ) -> None:

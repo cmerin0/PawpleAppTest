@@ -77,9 +77,8 @@ def pet_payload() -> dict[str, Any]:
         "description": "Friendly and energetic.",
     }
 
-
-# Test to ensure that creating a pet listing for a shelter results in a draft pet,
-# and that the pet is not publicly visible until it is published.
+# Intent: verify shelter staff can create a pet listing.
+# Ensures: new listings are persisted initially in draft status.
 def test_create_pet_creates_draft(client: TestClient) -> None:
     _, token = register_and_login(client)
     shelter = create_shelter(client, token)
@@ -99,9 +98,8 @@ def test_create_pet_creates_draft(client: TestClient) -> None:
     assert response_data["status"] == "draft"
     assert response_data["published_at"] is None
 
-
-# Test to ensure that only shelter owners or managers can create pet listings,
-# and that staff members without the appropriate role receive a 403 Forbidden response.
+# Intent: verify pet creation is limited to authorized shelter roles.
+# Ensures: users without owner or manager privileges cannot create pets.
 def test_create_pet_requires_owner_or_manager(
     client: TestClient,
     database_session: Session,
@@ -133,9 +131,8 @@ def test_create_pet_requires_owner_or_manager(
     assert response.status_code == 403
     assert response.json() == {"detail": "Shelter owner or manager access is required."}
 
-
-# Test to ensure that a draft pet is not publicly visible until it is published,
-# and that once published, the pet can be retrieved from the public listing.
+# Intent: verify draft listings are private before publication.
+# Ensures: public pet discovery excludes draft pets.
 def test_draft_pet_is_not_public_until_published(client: TestClient) -> None:
     _, token = register_and_login(client)
     create_shelter(client, token)
@@ -174,9 +171,8 @@ def test_draft_pet_is_not_public_until_published(client: TestClient) -> None:
     assert read_response.status_code == 200
     assert read_response.json()["id"] == pet_id
 
-
-# Test to ensure that once a pet is published, it cannot be updated,
-# and that attempts to update a published pet result in a 409 Conflict response.
+# Intent: verify published pet listings are immutable through the update endpoint.
+# Ensures: attempts to edit a published pet are rejected.
 def test_published_pet_cannot_be_updated(client: TestClient) -> None:
     _, token = register_and_login(client)
     create_shelter(client, token)
@@ -207,9 +203,8 @@ def test_published_pet_cannot_be_updated(client: TestClient) -> None:
     assert update_response.status_code == 409
     assert update_response.json() == {"detail": "Only draft pets can be updated."}
 
-
-# Test to ensure that a shelter cannot update a pet that belongs to another shelter,
-# and that attempts to do so result in a 404 Not Found response.
+# Intent: verify shelter ownership boundaries apply to pet updates.
+# Ensures: one shelter cannot modify another shelter's pet.
 def test_shelter_cannot_update_another_shelters_pet(client: TestClient) -> None:
     _, first_token = register_and_login(client)
     create_shelter(client, first_token)
