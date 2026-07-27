@@ -58,3 +58,40 @@ class AdoptionApplicationRead(BaseModel):
     submitted_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+# Additional application data returned to shelter staff, 
+# including the applicant's display name.
+class ShelterApplicationRead(AdoptionApplicationRead):
+
+    applicant_display_name: str
+
+# A normal review-status change made by a shelter owner or manager.
+class ShelterApplicationStatusUpdate(BaseModel):
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    status: Literal[
+        AdoptionApplicationStatus.REVIEWING,
+        AdoptionApplicationStatus.CONTACTED,
+        AdoptionApplicationStatus.REJECTED,
+    ]
+    note: str | None = Field(
+        default=None,
+        max_length=1_000,
+    )
+
+# Optional context recorded when a shelter approves an application
+class ShelterApplicationApproval(BaseModel):
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    note: str | None = Field(
+        default=None,
+        max_length=1_000,
+    )

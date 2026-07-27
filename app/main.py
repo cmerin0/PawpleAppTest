@@ -4,6 +4,7 @@ from app.api.routes.adopter_profiles import router as adopter_profiles_router
 from app.api.routes.adoption_applications import (
     applications_router,
     pet_application_router,
+    shelter_applications_router,
 )
 from app.api.routes.auth import router as auth_router
 from app.api.routes.pets import (
@@ -20,9 +21,9 @@ from app.api.routes.users import router as users_router
 # and includes the routers for users, authentication, shelters, and pets.
 prefix = "/api/v1"
 
-
+# Create the FastAPI application instance and include 
+# the routers for different API endpoints.
 def create_application() -> FastAPI:
-    """Create and configure the Pawple API application."""
     application = FastAPI(
         title="Pawple API",
         version="0.1.0",
@@ -37,6 +38,7 @@ def create_application() -> FastAPI:
     application.include_router(adopter_profiles_router, prefix=prefix)
     application.include_router(applications_router, prefix=prefix)
     application.include_router(pet_application_router, prefix=prefix)
+    application.include_router(shelter_applications_router, prefix=prefix)
     return application
 
 
