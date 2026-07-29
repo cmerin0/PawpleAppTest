@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.models.entities import Pet, PetStatus
 from tests.test_pets import create_shelter, pet_payload, register_and_login
 
-# 
+
+#
 def create_available_pet(
     client: TestClient,
 ) -> tuple[dict[str, Any], str]:

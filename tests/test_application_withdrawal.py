@@ -52,9 +52,7 @@ def test_applicant_can_withdraw_submitted_application(
     client: TestClient,
     database_session: Session,
 ) -> None:
-    application_data, adopter_token, pet_data = (
-        create_submitted_application_for_adopter(client)
-    )
+    application_data, adopter_token, pet_data = create_submitted_application_for_adopter(client)
 
     response = client.post(
         f"/api/v1/applications/{application_data['id']}/withdraw",
@@ -64,9 +62,7 @@ def test_applicant_can_withdraw_submitted_application(
     assert response.status_code == 200
     assert response.json()["status"] == "withdrawn"
 
-    pet = database_session.scalar(
-        select(Pet).where(Pet.id == pet_data["id"])
-    )
+    pet = database_session.scalar(select(Pet).where(Pet.id == pet_data["id"]))
 
     assert pet is not None
     assert pet.status == PetStatus.AVAILABLE
@@ -77,9 +73,7 @@ def test_applicant_can_withdraw_submitted_application(
 def test_withdrawn_application_reopens_as_same_draft(
     client: TestClient,
 ) -> None:
-    application_data, adopter_token, pet_data = (
-        create_submitted_application_for_adopter(client)
-    )
+    application_data, adopter_token, pet_data = create_submitted_application_for_adopter(client)
 
     headers = {"Authorization": f"Bearer {adopter_token}"}
 
@@ -107,9 +101,7 @@ def test_withdrawn_application_reopens_as_same_draft(
 def test_application_cannot_be_withdrawn_twice(
     client: TestClient,
 ) -> None:
-    application_data, adopter_token, _ = (
-        create_submitted_application_for_adopter(client)
-    )
+    application_data, adopter_token, _ = create_submitted_application_for_adopter(client)
 
     headers = {"Authorization": f"Bearer {adopter_token}"}
 
@@ -124,9 +116,7 @@ def test_application_cannot_be_withdrawn_twice(
 
     assert first_response.status_code == 200
     assert second_response.status_code == 409
-    assert second_response.json() == {
-        "detail": "This application cannot be withdrawn."
-    }
+    assert second_response.json() == {"detail": "This application cannot be withdrawn."}
 
 
 # Intent: verify users cannot withdraw applications they do not own.

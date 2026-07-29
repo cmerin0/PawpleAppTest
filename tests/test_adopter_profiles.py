@@ -34,6 +34,7 @@ def register_and_login(
         login_response.json()["access_token"],
     )
 
+
 # Intent: verify an authenticated user can create an adopter profile.
 # Ensures: the profile is persisted and returned successfully.
 def test_create_adopter_profile(

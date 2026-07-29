@@ -7,6 +7,7 @@ from app.api.routes.adoption_applications import (
     shelter_applications_router,
 )
 from app.api.routes.auth import router as auth_router
+from app.api.routes.pet_photos import router as pet_photos_router
 from app.api.routes.pets import (
     public_router as pets_router,
 )
@@ -21,7 +22,8 @@ from app.api.routes.users import router as users_router
 # and includes the routers for users, authentication, shelters, and pets.
 prefix = "/api/v1"
 
-# Create the FastAPI application instance and include 
+
+# Create the FastAPI application instance and include
 # the routers for different API endpoints.
 def create_application() -> FastAPI:
     application = FastAPI(
@@ -39,6 +41,7 @@ def create_application() -> FastAPI:
     application.include_router(applications_router, prefix=prefix)
     application.include_router(pet_application_router, prefix=prefix)
     application.include_router(shelter_applications_router, prefix=prefix)
+    application.include_router(pet_photos_router, prefix=prefix)
     return application
 
 

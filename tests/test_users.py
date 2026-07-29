@@ -30,6 +30,7 @@ def register_and_login(client):
 
     return (registration_response.json(), login_response.json()["access_token"])
 
+
 # Intent: verify registration creates an account securely.
 # Ensures: the user is persisted and the password is stored hashed.
 def test_register_user_creates_account_and_hashes_password(client, database_session) -> None:
@@ -62,6 +63,7 @@ def test_register_user_creates_account_and_hashes_password(client, database_sess
     assert user.password_hash != "test-password"
     assert verify_password("test-password", user.password_hash)
 
+
 # Intent: verify registration enforces unique email addresses.
 # Ensures: duplicate email registration is rejected.
 def test_register_user_rejects_duplicate_email(client) -> None:
@@ -77,6 +79,7 @@ def test_register_user_rejects_duplicate_email(client) -> None:
     assert first_response.status_code == 201
     assert second_response.status_code == 409
     assert second_response.json() == {"detail": "An account already exists for this email address."}
+
 
 # Intent: verify valid credentials can authenticate.
 # Ensures: login returns a usable access token.
@@ -115,6 +118,7 @@ def test_login_returns_valid_access_token(client) -> None:
     # verifying that the token payload contains the correct user ID in the "sub" claim.
     assert token_payload["sub"] == user_id
 
+
 # Intent: verify invalid credentials cannot authenticate.
 # Ensures: an incorrect password is rejected.
 def test_login_rejects_invalid_password(client) -> None:
@@ -139,6 +143,7 @@ def test_login_rejects_invalid_password(client) -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "Incorrect email or password."}
 
+
 # Intent: verify the current-user endpoint requires a token.
 # Ensures: unauthenticated access is rejected.
 def test_get_current_user_requires_token(client) -> None:
@@ -147,6 +152,7 @@ def test_get_current_user_requires_token(client) -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Could not validate authentication credentials."}
+
 
 # Intent: verify a valid token resolves to the authenticated account.
 # Ensures: the endpoint returns the correct user's data.
@@ -159,6 +165,7 @@ def test_get_current_user_returns_authenticated_account(client) -> None:
     assert response.status_code == 200
     assert response.json()["id"] == user_data["id"]
     assert response.json()["email"] == "test@example.com"
+
 
 # Intent: verify an authenticated user can change their display name.
 # Ensures: the updated display name is persisted and returned.
@@ -174,6 +181,7 @@ def test_update_current_user_updates_display_name(client) -> None:
 
     assert response.status_code == 200
     assert response.json()["display_name"] == "Enrique Navarro"
+
 
 # Intent: verify deleting the current account invalidates its access.
 # Ensures: subsequent authenticated requests using that account are rejected.

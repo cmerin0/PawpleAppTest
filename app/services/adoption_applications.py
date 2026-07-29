@@ -209,7 +209,8 @@ def submit_application(
 
     return application
 
-# list_applications_for_shelter retrieves all non-draft applications 
+
+# list_applications_for_shelter retrieves all non-draft applications
 # for Pets owned by a specific Shelter, ordered by submission date, newest first.
 def list_applications_for_shelter(
     database_session: Session,
@@ -232,6 +233,7 @@ def list_applications_for_shelter(
     )
 
     return list(database_session.scalars(statement).all())
+
 
 # get_application_for_shelter retrieves an application by its ID,
 # but only if it belongs to a Pet owned by the specified Shelter.
@@ -257,6 +259,7 @@ def get_application_for_shelter(
         raise AdoptionApplicationNotFoundError
 
     return application
+
 
 # update_application_status_for_shelter updates the status of an adoption application,
 # ensuring that the transition is valid based on the current status and the new status.
@@ -307,7 +310,8 @@ def update_application_status_for_shelter(
 
     return application
 
-# approve application for shelter 
+
+# approve application for shelter
 def approve_application_for_shelter(
     database_session: Session,
     *,
@@ -330,11 +334,7 @@ def approve_application_for_shelter(
     if application is None:
         raise AdoptionApplicationNotFoundError
 
-    pet_statement = (
-        select(Pet)
-        .where(Pet.id == application.pet_id)
-        .with_for_update()
-    )
+    pet_statement = select(Pet).where(Pet.id == application.pet_id).with_for_update()
     pet = database_session.scalar(pet_statement)
 
     if pet is None:
@@ -400,6 +400,7 @@ def withdraw_application(
 
     return application
 
+
 # Complete an approved adoption and mark its Pet as adopted.
 def complete_adoption_for_shelter(
     database_session: Session,
@@ -423,11 +424,7 @@ def complete_adoption_for_shelter(
     if application is None:
         raise AdoptionApplicationNotFoundError
 
-    pet_statement = (
-        select(Pet)
-        .where(Pet.id == application.pet_id)
-        .with_for_update()
-    )
+    pet_statement = select(Pet).where(Pet.id == application.pet_id).with_for_update()
     pet = database_session.scalar(pet_statement)
 
     if pet is None:

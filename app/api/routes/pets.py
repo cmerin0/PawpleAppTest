@@ -58,7 +58,6 @@ def list_pets(
     return [PetRead.model_validate(pet) for pet in pets]
 
 
-
 # Read endpoint for retrieving a single available pet by its ID.
 # This endpoint returns a 404 error if the pet is not found or is not available.
 @public_router.get(

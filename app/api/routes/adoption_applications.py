@@ -179,7 +179,8 @@ def submit_current_users_application(
 
     return AdoptionApplicationRead.model_validate(submitted_application)
 
-# list_current_shelters_applications retrieves all submitted 
+
+# list_current_shelters_applications retrieves all submitted
 # or later applications for the authenticated Shelter.
 @shelter_applications_router.get("", response_model=list[ShelterApplicationRead])
 def list_current_shelters_applications(
@@ -197,13 +198,12 @@ def list_current_shelters_applications(
 
     return [
         ShelterApplicationRead(
-            **AdoptionApplicationRead.model_validate(
-                application
-            ).model_dump(),
+            **AdoptionApplicationRead.model_validate(application).model_dump(),
             applicant_display_name=application.applicant.display_name,
         )
         for application in applications
     ]
+
 
 # update shelter application status apply a permitted normal
 # review transition to one application
@@ -242,11 +242,10 @@ def update_shelter_application_status(
         ) from error
 
     return ShelterApplicationRead(
-        **AdoptionApplicationRead.model_validate(
-            updated_application
-        ).model_dump(),
+        **AdoptionApplicationRead.model_validate(updated_application).model_dump(),
         applicant_display_name=updated_application.applicant.display_name,
     )
+
 
 # Approve one contacted application and hide its Pet from discovery.
 @shelter_applications_router.post(
@@ -284,11 +283,10 @@ def approve_shelter_application(
         ) from error
 
     return ShelterApplicationRead(
-        **AdoptionApplicationRead.model_validate(
-            approved_application
-        ).model_dump(),
+        **AdoptionApplicationRead.model_validate(approved_application).model_dump(),
         applicant_display_name=approved_application.applicant.display_name,
     )
+
 
 # Withdraw one unapproved application owned by the current User.
 @applications_router.post(
@@ -322,9 +320,8 @@ def withdraw_current_users_application(
             detail="This application cannot be withdrawn.",
         ) from error
 
-    return AdoptionApplicationRead.model_validate(
-        withdrawn_application
-    )
+    return AdoptionApplicationRead.model_validate(withdrawn_application)
+
 
 # Mark the approved application's Pet as adopted.
 @shelter_applications_router.post(
@@ -362,8 +359,6 @@ def complete_shelter_adoption(
         ) from error
 
     return ShelterApplicationRead(
-        **AdoptionApplicationRead.model_validate(
-            completed_application
-        ).model_dump(),
+        **AdoptionApplicationRead.model_validate(completed_application).model_dump(),
         applicant_display_name=completed_application.applicant.display_name,
     )

@@ -56,6 +56,7 @@ def register_adopter(
 
     return token
 
+
 # Intent: verify an adopter can create and retrieve a draft application.
 # Ensures: draft creation is idempotent and returns the same application.
 def test_create_or_read_draft_application(
@@ -91,6 +92,7 @@ def test_create_or_read_draft_application(
 
     assert len(status_events) == 1
     assert status_events[0].to_status == AdoptionApplicationStatus.DRAFT
+
 
 # Intent: verify an applicant can complete and submit a draft application.
 # Ensures: updates persist and submission advances the application status.
@@ -144,6 +146,7 @@ def test_applicant_can_update_and_submit_draft(
     assert pet is not None
     assert pet.status == PetStatus.AVAILABLE
 
+
 # Intent: verify submitting an application does not hide the pet from others.
 # Ensures: other users can still discover the submitted pet.
 def test_submitted_pet_remains_visible_to_other_users(
@@ -192,6 +195,7 @@ def test_submitted_pet_remains_visible_to_other_users(
     assert another_user_response.status_code == 200
     assert [pet["id"] for pet in another_user_response.json()] == [pet_data["id"]]
 
+
 # Intent: verify application privacy between users.
 # Ensures: a user cannot read another user's application.
 def test_user_cannot_read_another_users_application(
@@ -223,6 +227,7 @@ def test_user_cannot_read_another_users_application(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Application not found."}
+
 
 # Intent: verify a submitted application cannot be submitted twice.
 # Ensures: duplicate submission is rejected safely.

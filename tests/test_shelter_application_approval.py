@@ -55,19 +55,14 @@ def test_approving_contacted_application_moves_pet_to_pending(
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
 
-    pet = database_session.scalar(
-        select(Pet).where(Pet.id == application_data["pet_id"])
-    )
+    pet = database_session.scalar(select(Pet).where(Pet.id == application_data["pet_id"]))
 
     assert pet is not None
     assert pet.status == PetStatus.PENDING
 
     latest_event = database_session.scalar(
         select(ApplicationStatusEvent)
-        .where(
-            ApplicationStatusEvent.application_id
-            == application_data["id"]
-        )
+        .where(ApplicationStatusEvent.application_id == application_data["id"])
         .order_by(ApplicationStatusEvent.created_at.desc())
     )
 
@@ -92,9 +87,7 @@ def test_approved_pet_is_hidden_from_public_discovery(
     assert approval_response.status_code == 200
 
     list_response = client.get("/api/v1/pets")
-    read_response = client.get(
-        f"/api/v1/pets/{application_data['pet_id']}"
-    )
+    read_response = client.get(f"/api/v1/pets/{application_data['pet_id']}")
 
     assert list_response.status_code == 200
     assert list_response.json() == []
@@ -117,6 +110,4 @@ def test_submitted_application_cannot_be_approved_directly(
     )
 
     assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Only contacted applications can be approved."
-    }
+    assert response.json() == {"detail": "Only contacted applications can be approved."}

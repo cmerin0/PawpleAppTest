@@ -65,6 +65,7 @@ def create_submitted_application(
 
     return submit_response.json(), owner_token, shelter["id"]
 
+
 # Intent: verify a shelter member can list submitted applications.
 # Ensures: the list endpoint returns applications for that shelter.
 def test_shelter_member_can_list_submitted_applications(
@@ -82,6 +83,7 @@ def test_shelter_member_can_list_submitted_applications(
     assert response.json()[0]["id"] == application_data["id"]
     assert response.json()[0]["status"] == "submitted"
     assert response.json()[0]["applicant_display_name"] == "Test Adopter"
+
 
 # Intent: verify shelter staff can list submitted applications.
 # Ensures: staff receive the same authorized application listing.
@@ -112,9 +114,8 @@ def test_shelter_staff_member_can_list_submitted_applications(
     )
 
     assert response.status_code == 200
-    assert [application["id"] for application in response.json()] == [
-        application_data["id"]
-    ]
+    assert [application["id"] for application in response.json()] == [application_data["id"]]
+
 
 # Intent: verify application listings are isolated by shelter.
 # Ensures: a shelter cannot list another shelter's applications.

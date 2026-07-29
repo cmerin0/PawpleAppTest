@@ -9,7 +9,7 @@ from tests.test_pets import register_and_login
 from tests.test_shelter_applications import create_submitted_application
 
 
-# test shelter owner can move application to reviewing 
+# test shelter owner can move application to reviewing
 # Intent: verify a shelter owner can advance an application to reviewing.
 # Ensures: the permitted status transition succeeds.
 def test_shelter_owner_can_move_application_to_reviewing(
@@ -60,9 +60,7 @@ def test_shelter_staff_cannot_change_application_status(
     )
 
     assert response.status_code == 403
-    assert response.json() == {
-        "detail": "Shelter owner or manager access is required."
-    }
+    assert response.json() == {"detail": "Shelter owner or manager access is required."}
 
 
 # Intent: verify shelter access is isolated between shelters.
@@ -139,9 +137,7 @@ def test_rejecting_application_keeps_pet_available(
     assert response.status_code == 200
     assert response.json()["status"] == "rejected"
 
-    pet = database_session.scalar(
-        select(Pet).where(Pet.id == application_data["pet_id"])
-    )
+    pet = database_session.scalar(select(Pet).where(Pet.id == application_data["pet_id"]))
 
     assert pet is not None
     assert pet.status == PetStatus.AVAILABLE

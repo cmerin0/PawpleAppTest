@@ -14,6 +14,7 @@ from app.models.entities import (
     ApplicationStatusEvent,
     Pet,
     PetDismissal,
+    PetPhoto,
     Shelter,
     ShelterMember,
     User,
@@ -40,6 +41,7 @@ def clear_test_database() -> None:
     with test_engine.begin() as connection:
         connection.execute(delete(ApplicationStatusEvent))
         connection.execute(delete(AdoptionApplication))
+        connection.execute(delete(PetPhoto))
         connection.execute(delete(PetDismissal))
         connection.execute(delete(Pet))
         connection.execute(delete(ShelterMember))
@@ -63,9 +65,9 @@ def database_session() -> Generator[Session, None, None]:
         clear_test_database()
 
 
+# Make API requests against the isolated test database.
 @pytest.fixture
 def client(database_session: Session) -> Generator[TestClient, None, None]:
-    """Make API requests against the isolated test database."""
 
     def override_database_session() -> Generator[Session, None, None]:
         yield database_session

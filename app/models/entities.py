@@ -248,6 +248,12 @@ class Pet(Base):
         back_populates="pet",
     )
 
+    photos: Mapped[list[PetPhoto]] = relationship(
+        back_populates="pet",
+        cascade="all, delete-orphan",
+        order_by="PetPhoto.sort_order",
+    )
+
 
 # The AdopterProfile model represents the optional adopter-specific profile
 # for a User. A User can have only one AdopterProfile.
@@ -443,4 +449,53 @@ class ApplicationStatusEvent(Base):
     )
     changed_by_user: Mapped[User] = relationship(
         back_populates="application_status_events",
+    )
+
+
+# PetPhoto stores metadata for an image file kept in MinIO/S3.
+# PostgreSQL stores the object key, never the image bytes themselves.
+class PetPhoto(Base):
+    __tablename__ = "pet_photos"
+
+    __table_args__ = (
+        # A Pet cannot have two photos assigned to the same display position.
+        UniqueConstraint(
+            "pet_id",
+            "sort_order",
+            name="uq_pet_photos_pet_sort_order",
+        ),
+        # Prevent invalid positions such as -1.
+        CheckConstraint(
+            "sort_order >= 0",
+            name="ck_pet_photos_sort_order_non_negative",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True,
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    pet_id: Mapped[UUID] = mapped_column(
+        # Photo metadata disappears if its parent Pet is deleted.
+        ForeignKey("pets.id", ondelete="CASCADE"),
+        index=True,
+    )
+    object_key: Mapped[str] = mapped_column(
+        String(512),
+        unique=True,
+    )
+    alt_text: Mapped[str] = mapped_column(
+        String(255),
+    )
+    sort_order: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    pet: Mapped[Pet] = relationship(
+        back_populates="photos",
     )

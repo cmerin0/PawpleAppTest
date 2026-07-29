@@ -2,6 +2,8 @@ from functools import (
     lru_cache,  # Import Python's cache decorator so settings are created only once.
 )
 
+from pydantic import SecretStr
+
 # Import the base class used to define typed settings and the helper used to
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,6 +19,14 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    # Object-storage connection used for Pet images.
+    minio_endpoint_url: str
+    minio_access_key: str
+    minio_secret_key: SecretStr
+    minio_bucket: str
+    minio_region: str = "us-east-1"
+    minio_use_ssl: bool = False
+    max_pet_photo_upload_bytes: int = 5 * 1024 * 1024
 
     # Configure the settings model's environment-file and extra-value behavior.
     model_config = SettingsConfigDict(

@@ -29,6 +29,10 @@ dependencies = [
     "pwdlib[argon2]>=0.2,<1",                   # (Added Later) Converts a plain-text password into a one-way password hash
     "email-validator>=2.2,<3",                  # (Added Later) Validates email
     "PyJWT>=2.10,<3",                           # (Added Later) JWT helps us authentication by tokens
+    "boto3>=1.35,<2",                           # S3-compatible client used for MinIO and future cloud storage.
+    "boto3-stubs[s3]>=1.35,<2",                 # Type information for boto3 and botocore S3 usage. (Must be added after boto3)
+    "pillow>=12.3,<13",                         # Validates the real image contents.
+    "python-multipart>=0.0.32,<1",              # Required for the multipart endpoint we add next.
 ]
 
 

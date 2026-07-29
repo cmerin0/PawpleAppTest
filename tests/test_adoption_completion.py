@@ -41,9 +41,7 @@ def test_complete_adoption_marks_pet_as_adopted(
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
 
-    pet = database_session.scalar(
-        select(Pet).where(Pet.id == application_data["pet_id"])
-    )
+    pet = database_session.scalar(select(Pet).where(Pet.id == application_data["pet_id"]))
 
     assert pet is not None
     assert pet.status == PetStatus.ADOPTED
@@ -65,9 +63,7 @@ def test_adopted_pet_remains_hidden_from_public_discovery(
     assert completion_response.status_code == 200
 
     list_response = client.get("/api/v1/pets")
-    read_response = client.get(
-        f"/api/v1/pets/{application_data['pet_id']}"
-    )
+    read_response = client.get(f"/api/v1/pets/{application_data['pet_id']}")
 
     assert list_response.status_code == 200
     assert list_response.json() == []
@@ -84,10 +80,7 @@ def test_adoption_cannot_be_completed_twice(
     application_data, owner_token = create_approved_application(client)
 
     headers = {"Authorization": f"Bearer {owner_token}"}
-    endpoint = (
-        f"/api/v1/shelter/applications/"
-        f"{application_data['id']}/complete-adoption"
-    )
+    endpoint = f"/api/v1/shelter/applications/{application_data['id']}/complete-adoption"
 
     first_response = client.post(
         endpoint,
@@ -102,6 +95,4 @@ def test_adoption_cannot_be_completed_twice(
 
     assert first_response.status_code == 200
     assert second_response.status_code == 409
-    assert second_response.json() == {
-        "detail": "This pet is not pending adoption."
-    }
+    assert second_response.json() == {"detail": "This pet is not pending adoption."}

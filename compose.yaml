@@ -19,6 +19,62 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+  minio:
+    # Local S3-compatible storage for development.
+    # Pin this to a specific release before production; `latest` is suitable
+    # only while learning and developing locally.
+    image: minio/minio:latest
+    container_name: pawple-minio
+    restart: unless-stopped
 
+    # The image entrypoint is already `minio`, so we use `server`, not `minio server`.
+    # Port 9001 keeps the web console at a predictable address.
+    command: server /data --console-address ":9001"
+
+    environment:
+      # Root credentials are for local administration only.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:? Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:? Set MINIO_ROOT_PASSWORD in .env}
+
+    ports:
+      # S3-compatible API used later by the FastAPI application.
+      - "${MINIO_API_PORT:-9000}:9000"
+      # Browser console for manually inspecting buckets and files.
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+    volumes:
+      - minio_data:/data
+
+    healthcheck:
+      # MinIO exposes this unauthenticated readiness endpoint.
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+
+  minio-init:
+    # One-time setup container: creates the private application bucket.
+    image: minio/mc:latest
+    container_name: pawple-minio-init
+    restart: "no"
+
+    depends_on:
+      minio:
+        condition: service_healthy
+
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:? Set MINIO_BUCKET in .env}
+
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000
+      $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      mc mb --ignore-existing local/$$MINIO_BUCKET
+      "
 volumes:
   postgres_data:
+  minio_data:
