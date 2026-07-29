@@ -12,8 +12,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.storage import get_object_storage_client
-from app.models.entities import Pet, PetPhoto
+from app.core.storage import get_object_storage_client, get_public_object_storage_client
+from app.models.entities import Pet, PetPhoto, PetStatus
 
 
 class InvalidPetPhotoError(Exception):
@@ -30,6 +30,15 @@ class PetPhotoStorageError(Exception):
 
 class PetPhotoPersistenceError(Exception):
     """Raised when the database record cannot be persisted."""
+
+
+class PublicPetNotFoundError(Exception):
+    """
+    Raised when a pet does not exist or is not publicly available.
+
+    Using the same error for both cases prevents disclosing private draft,
+    pending, adopted, or unavailable pet records.
+    """
 
 
 @dataclass(frozen=True)
@@ -182,3 +191,63 @@ def create_pet_photo(
         raise PetPhotoPersistenceError("The photo record could not be saved.") from error
 
     return photo
+
+
+def list_public_pet_photos(
+    database_session: Session,
+    *,
+    pet_id: UUID,
+) -> list[PetPhoto]:
+    """
+    Return ordered photos only when the pet is publicly available.
+    """
+    public_pet_id = database_session.scalar(
+        select(Pet.id).where(
+            Pet.id == pet_id,
+            Pet.status == PetStatus.AVAILABLE,
+        )
+    )
+
+    if public_pet_id is None:
+        raise PublicPetNotFoundError
+
+    photos = database_session.scalars(
+        select(PetPhoto)
+        .where(PetPhoto.pet_id == pet_id)
+        .order_by(
+            PetPhoto.sort_order.asc(),
+            PetPhoto.created_at.asc(),
+            PetPhoto.id.asc(),
+        )
+    ).all()
+
+    return list(photos)
+
+
+def create_pet_photo_download_url(
+    *,
+    object_key: str,
+) -> str:
+    """
+    Generate a temporary GET URL without making the bucket public.
+
+    The secret key signs the URL but is never included in the response.
+    """
+    public_storage_client = get_public_object_storage_client()
+
+    try:
+        download_url = public_storage_client.generate_presigned_url(
+            ClientMethod="get_object",
+            Params={
+                "Bucket": settings.minio_bucket,
+                "Key": object_key,
+            },
+            ExpiresIn=settings.pet_photo_url_expiration_seconds,
+        )
+    except (BotoCoreError, ClientError) as error:
+        raise PetPhotoStorageError("A temporary photo URL could not be generated.") from error
+
+    if not download_url:
+        raise PetPhotoStorageError("A temporary photo URL could not be generated.")
+
+    return download_url

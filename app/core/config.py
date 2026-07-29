@@ -2,7 +2,7 @@ from functools import (
     lru_cache,  # Import Python's cache decorator so settings are created only once.
 )
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 
 # Import the base class used to define typed settings and the helper used to
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +27,16 @@ class Settings(BaseSettings):
     minio_region: str = "us-east-1"
     minio_use_ssl: bool = False
     max_pet_photo_upload_bytes: int = 5 * 1024 * 1024
+    minio_endpoint_url: str
+    minio_public_endpoint_url: str
+
+    # Keep URLs short-lived. The limits prevent accidentally creating
+    # extremely short or unnecessarily long-lived credentials.
+    pet_photo_url_expiration_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=3600,
+    )
 
     # Configure the settings model's environment-file and extra-value behavior.
     model_config = SettingsConfigDict(

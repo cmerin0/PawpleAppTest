@@ -6,14 +6,19 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies.shelter import CurrentShelterManager
 from app.db.session import get_database_session
-from app.schemas.pet_photos import PetPhotoRead
+from app.schemas.pet_photos import PetPhotoPublicRead, PetPhotoRead
 from app.services.pet_photos import (
     InvalidPetPhotoError,
     PetPhotoNotFoundError,
     PetPhotoPersistenceError,
     PetPhotoStorageError,
+    PublicPetNotFoundError,
     create_pet_photo,
+    create_pet_photo_download_url,
     validate_pet_image,
+)
+from app.services.pet_photos import (
+    list_public_pet_photos as list_public_pet_photo_records,
 )
 
 router = APIRouter(prefix="/pets", tags=["pet photos"])
@@ -82,3 +87,49 @@ async def upload_pet_photo(
         ) from error
 
     return PetPhotoRead.model_validate(photo)
+
+
+@router.get(
+    "/{pet_id}/photos",
+    response_model=list[PetPhotoPublicRead],
+)
+def list_public_pet_photos(
+    pet_id: UUID,
+    database_session: DatabaseSession,
+) -> list[PetPhotoPublicRead]:
+    """
+    Return ordered photos for a publicly available pet.
+
+    This endpoint does not require authentication because available pets
+    are part of public adoption discovery.
+    """
+    try:
+        photos = list_public_pet_photo_records(
+            database_session,
+            pet_id=pet_id,
+        )
+
+        return [
+            PetPhotoPublicRead(
+                id=photo.id,
+                pet_id=photo.pet_id,
+                alt_text=photo.alt_text,
+                sort_order=photo.sort_order,
+                created_at=photo.created_at,
+                url=create_pet_photo_download_url(
+                    object_key=photo.object_key,
+                ),
+            )
+            for photo in photos
+        ]
+    except PublicPetNotFoundError as error:
+        # Draft or non-existent pets intentionally produce the same response.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pet not found.",
+        ) from error
+    except PetPhotoStorageError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Photo storage is temporarily unavailable.",
+        ) from error

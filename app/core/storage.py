@@ -8,22 +8,24 @@ from mypy_boto3_s3 import S3Client
 from app.core.config import settings
 
 
-# MinIO is not AWS, so boto3 must use the configured local endpoint.
-# Create one cached S3-compatible client for MinIO
-@lru_cache
-def get_object_storage_client() -> S3Client:
+def _create_object_storage_client(endpoint_url: str) -> S3Client:
+    """
+    Build an S3-compatible client for a particular endpoint.
+
+    The upload client and presigned-URL client use the same credentials,
+    but they may use different network addresses.
+    """
     return boto3.client(
         "s3",
-        endpoint_url=settings.minio_endpoint_url,
+        endpoint_url=endpoint_url,
         aws_access_key_id=settings.minio_access_key,
         aws_secret_access_key=settings.minio_secret_key.get_secret_value(),
         region_name=settings.minio_region,
         use_ssl=settings.minio_use_ssl,
         config=Config(
             signature_version="s3v4",
-            s3={
-                "addressing_style": "path",
-            },
+            # Path-style URLs are broadly compatible with local MinIO.
+            s3={"addressing_style": "path"},
             retries={
                 "mode": "standard",
                 "max_attempts": 3,
@@ -32,14 +34,33 @@ def get_object_storage_client() -> S3Client:
     )
 
 
-# Fail clearly when MinIO is unavailable or the configured bucket is missing.
-def verify_object_storage_bucket() -> None:
-    client = get_object_storage_client()
+@lru_cache
+def get_object_storage_client() -> S3Client:
+    """
+    Return the client used by the API for upload and deletion operations.
 
+    This endpoint must be reachable from the API process or container.
+    """
+    return _create_object_storage_client(settings.minio_endpoint_url)
+
+
+@lru_cache
+def get_public_object_storage_client() -> S3Client:
+    """
+    Return a client configured with the browser-facing MinIO address.
+
+    Generating a presigned URL includes this endpoint in the resulting URL.
+    """
+    return _create_object_storage_client(settings.minio_public_endpoint_url)
+
+
+def verify_object_storage_bucket() -> None:
+    """Confirm that the configured bucket exists and is accessible."""
     try:
-        # This checks bucket access without listing or modifying any objects.
-        client.head_bucket(Bucket=settings.minio_bucket)
+        get_object_storage_client().head_bucket(
+            Bucket=settings.minio_bucket,
+        )
     except (BotoCoreError, ClientError) as error:
         raise RuntimeError(
-            "Object storage is unavailable or the configured bucket does not exist."
+            f"Object-storage bucket '{settings.minio_bucket}' is unavailable."
         ) from error
