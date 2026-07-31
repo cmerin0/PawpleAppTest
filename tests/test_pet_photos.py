@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from io import BytesIO
 from types import SimpleNamespace
@@ -15,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.entities import PetPhoto, ShelterMember, ShelterMemberRole
+from app.models.entities import Pet, PetPhoto, PetStatus, ShelterMember, ShelterMemberRole
 from app.services import pet_photos
 from app.services.pet_photos import (
     InvalidPetPhotoError,
@@ -69,6 +70,9 @@ class FakeObjectStorageClient:
         self.put_calls: list[dict[str, Any]] = []
         self.delete_calls: list[dict[str, Any]] = []
         self.fail_upload = False
+        self.fail_delete = False
+        self.presigned_url_calls: list[dict[str, Any]] = []
+        self.fail_presigned_url = False
 
     def put_object(self, **kwargs: Any) -> dict[str, Any]:
         if self.fail_upload:
@@ -82,7 +86,51 @@ class FakeObjectStorageClient:
 
     def delete_object(self, **kwargs: Any) -> dict[str, Any]:
         self.delete_calls.append(kwargs)
+
+        if self.fail_delete:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "InternalError",
+                        "Message": "Object deletion failed.",
+                    }
+                },
+                "DeleteObject",
+            )
+
         return {}
+
+    def generate_presigned_url(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Return a predictable URL without signing real MinIO credentials.
+
+        Recording the arguments also lets tests verify the object key and
+        expiration configured by the application.
+        """
+        del args
+
+        if self.fail_presigned_url:
+            raise ClientError(
+                {
+                    "Error": {
+                        "Code": "InternalError",
+                        "Message": "URL generation failed.",
+                    }
+                },
+                "GetObject",
+            )
+
+        self.presigned_url_calls.append(kwargs)
+
+        params: dict[str, Any] = kwargs["Params"]
+        object_key = params["Key"]
+        expires_in = kwargs["ExpiresIn"]
+
+        return f"http://storage.test/{object_key}?temporary=true&expires={expires_in}"
 
 
 # Auxiliary fixture that replaces the production storage client with the fake
@@ -93,9 +141,17 @@ def fake_storage_client(
 ) -> Iterator[FakeObjectStorageClient]:
     fake_client = FakeObjectStorageClient()
 
+    # Used for upload and deletion operations.
     monkeypatch.setattr(
         pet_photos,
         "get_object_storage_client",
+        lambda: fake_client,
+    )
+
+    # Used when creating browser-facing presigned URLs.
+    monkeypatch.setattr(
+        pet_photos,
+        "get_public_object_storage_client",
         lambda: fake_client,
     )
 
@@ -198,6 +254,52 @@ def create_pet_for_photo(
             "size": "Large",
             "description": "Friendly and energetic.",
         },
+    )
+
+    assert response.status_code == 201
+
+    return response.json()
+
+
+# Intent: Publish a draft pet so its photos become publicly retrievable
+# Ensures:
+def publish_pet_for_photo(
+    client: TestClient,
+    token: str,
+    pet_id: str,
+) -> dict[str, Any]:
+    response = client.post(
+        f"/api/v1/shelter/pets/{pet_id}/publish",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "available"
+
+    return response.json()
+
+
+# Auxiliary API helper that uploads one valid image and returns its metadata.
+# Keeping setup in one place makes deletion tests focus on deletion behavior.
+def upload_pet_photo_for_test(
+    client: TestClient,
+    token: str,
+    pet_id: str,
+    *,
+    filename: str,
+    alt_text: str,
+) -> dict[str, Any]:
+    response = client.post(
+        f"/api/v1/pets/{pet_id}/photos",
+        headers={"Authorization": f"Bearer {token}"},
+        files={
+            "image_file": (
+                filename,
+                make_image_bytes("PNG"),
+                "image/png",
+            )
+        },
+        data={"alt_text": alt_text},
     )
 
     assert response.status_code == 201
@@ -643,3 +745,525 @@ def test_upload_pet_photo_returns_503_when_storage_fails(
     assert response.json() == {"detail": "Photo storage is temporarily unavailable."}
 
     assert len(fake_storage_client.put_calls) == 0
+
+
+def test_public_pet_photos_are_returned_in_upload_order(
+    client: TestClient,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="public-photo-owner@example.com",
+        display_name="Public Photo Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+
+    first_upload_response = client.post(
+        f"/api/v1/pets/{pet['id']}/photos",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        files={
+            "image_file": (
+                "luna-front.png",
+                make_image_bytes("PNG"),
+                "image/png",
+            )
+        },
+        data={"alt_text": "Luna sitting outside."},
+    )
+
+    second_upload_response = client.post(
+        f"/api/v1/pets/{pet['id']}/photos",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        files={
+            "image_file": (
+                "luna-side.webp",
+                make_image_bytes("WEBP"),
+                "image/webp",
+            )
+        },
+        data={"alt_text": "Luna viewed from the side."},
+    )
+
+    assert first_upload_response.status_code == 201
+    assert second_upload_response.status_code == 201
+
+    publish_pet_for_photo(client, owner_token, pet["id"])
+
+    response = client.get(f"/api/v1/pets/{pet['id']}/photos")
+
+    assert response.status_code == 200
+
+    response_data = response.json()
+
+    # Photos retain the order in which they were uploaded.
+    assert [photo["sort_order"] for photo in response_data] == [0, 1]
+    assert [photo["id"] for photo in response_data] == [
+        first_upload_response.json()["id"],
+        second_upload_response.json()["id"],
+    ]
+
+    # Public responses contain temporary URLs, never permanent object keys.
+    assert all("object_key" not in photo for photo in response_data)
+    assert all(photo["url"].startswith("http://storage.test/") for photo in response_data)
+
+    assert len(fake_storage_client.presigned_url_calls) == 2
+
+
+def test_available_pet_without_photos_returns_empty_list(
+    client: TestClient,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="no-photo-owner@example.com",
+        display_name="No Photo Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+
+    publish_pet_for_photo(client, owner_token, pet["id"])
+
+    response = client.get(f"/api/v1/pets/{pet['id']}/photos")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+    # No photos means no URLs need to be signed.
+    assert fake_storage_client.presigned_url_calls == []
+
+
+@pytest.mark.parametrize(
+    "private_status",
+    [
+        PetStatus.DRAFT,
+        PetStatus.PENDING,
+        PetStatus.ADOPTED,
+        PetStatus.UNAVAILABLE,
+    ],
+)
+def test_photos_for_non_public_pet_status_return_404(
+    client: TestClient,
+    database_session: Session,
+    fake_storage_client: FakeObjectStorageClient,
+    private_status: PetStatus,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="private-photo-owner@example.com",
+        display_name="Private Photo Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+
+    pet_record = database_session.get(Pet, UUID(pet["id"]))
+
+    assert pet_record is not None
+
+    # Direct assignment is appropriate here because this test concerns
+    # visibility, not the workflow that normally changes the pet status.
+    pet_record.status = private_status
+    database_session.commit()
+
+    response = client.get(f"/api/v1/pets/{pet['id']}/photos")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Pet not found."}
+
+    # Private pet records must not cause signed URLs to be generated.
+    assert fake_storage_client.presigned_url_calls == []
+
+
+def test_nonexistent_pet_photos_return_404(
+    client: TestClient,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    nonexistent_pet_id = uuid4()
+
+    response = client.get(f"/api/v1/pets/{nonexistent_pet_id}/photos")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Pet not found."}
+    assert fake_storage_client.presigned_url_calls == []
+
+
+def test_public_photo_response_uses_configured_expiration(
+    client: TestClient,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="expiration-owner@example.com",
+        display_name="Expiration Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+
+    upload_response = client.post(
+        f"/api/v1/pets/{pet['id']}/photos",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        files={
+            "image_file": (
+                "luna.png",
+                make_image_bytes("PNG"),
+                "image/png",
+            )
+        },
+        data={"alt_text": "Luna sitting outside."},
+    )
+
+    assert upload_response.status_code == 201
+
+    publish_pet_for_photo(client, owner_token, pet["id"])
+
+    response = client.get(f"/api/v1/pets/{pet['id']}/photos")
+
+    assert response.status_code == 200
+    assert len(fake_storage_client.presigned_url_calls) == 1
+
+    signing_call = fake_storage_client.presigned_url_calls[0]
+
+    assert signing_call["ExpiresIn"] == settings.pet_photo_url_expiration_seconds
+    assert signing_call["ClientMethod"] == "get_object"
+
+
+def test_public_photo_endpoint_returns_503_when_url_signing_fails(
+    client: TestClient,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="signing-failure-owner@example.com",
+        display_name="Signing Failure Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+
+    upload_response = client.post(
+        f"/api/v1/pets/{pet['id']}/photos",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        files={
+            "image_file": (
+                "luna.png",
+                make_image_bytes("PNG"),
+                "image/png",
+            )
+        },
+        data={"alt_text": "Luna sitting outside."},
+    )
+
+    assert upload_response.status_code == 201
+
+    publish_pet_for_photo(client, owner_token, pet["id"])
+
+    # Only URL signing fails; the previously uploaded object remains intact.
+    fake_storage_client.fail_presigned_url = True
+
+    response = client.get(f"/api/v1/pets/{pet['id']}/photos")
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Photo storage is temporarily unavailable."}
+
+
+# Intent: verify an owner can delete a photo and preserve contiguous ordering.
+# Ensures: the row and object are removed while remaining photos become 0, 1.
+def test_owner_can_delete_pet_photo_and_remaining_photos_are_reordered(
+    client: TestClient,
+    database_session: Session,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="delete-owner@example.com",
+        display_name="Delete Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+
+    first_photo = upload_pet_photo_for_test(
+        client,
+        owner_token,
+        pet["id"],
+        filename="first.png",
+        alt_text="Luna facing forward.",
+    )
+    middle_photo = upload_pet_photo_for_test(
+        client,
+        owner_token,
+        pet["id"],
+        filename="middle.png",
+        alt_text="Luna viewed from the side.",
+    )
+    last_photo = upload_pet_photo_for_test(
+        client,
+        owner_token,
+        pet["id"],
+        filename="last.png",
+        alt_text="Luna playing outside.",
+    )
+
+    deleted_object_key = fake_storage_client.put_calls[1]["Key"]
+
+    response = client.delete(
+        f"/api/v1/pets/{pet['id']}/photos/{middle_photo['id']}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    deleted_photo = database_session.get(PetPhoto, UUID(middle_photo["id"]))
+    assert deleted_photo is None
+
+    remaining_photos = list(
+        database_session.scalars(
+            select(PetPhoto)
+            .where(PetPhoto.pet_id == UUID(pet["id"]))
+            .order_by(PetPhoto.sort_order.asc())
+        ).all()
+    )
+
+    assert [str(photo.id) for photo in remaining_photos] == [
+        first_photo["id"],
+        last_photo["id"],
+    ]
+    assert [photo.sort_order for photo in remaining_photos] == [0, 1]
+
+    # Critical assertion: cleanup targets only the deleted photo's object.
+    assert fake_storage_client.delete_calls == [
+        {
+            "Bucket": settings.minio_bucket,
+            "Key": deleted_object_key,
+        }
+    ]
+
+
+# Intent: verify managers have the same photo-deletion permission as owners.
+# Ensures: an authorized manager can delete a shelter-owned photo.
+def test_manager_can_delete_pet_photo(
+    client: TestClient,
+    database_session: Session,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="manager-delete-owner@example.com",
+        display_name="Manager Delete Owner",
+    )
+
+    shelter = create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+    photo = upload_pet_photo_for_test(
+        client,
+        owner_token,
+        pet["id"],
+        filename="manager-delete.png",
+        alt_text="Luna waiting for adoption.",
+    )
+
+    manager_user, manager_token = register_and_login_for_photo(
+        client,
+        email="photo-manager@example.com",
+        display_name="Photo Manager",
+    )
+
+    database_session.add(
+        ShelterMember(
+            shelter_id=UUID(shelter["id"]),
+            user_id=UUID(manager_user["id"]),
+            role=ShelterMemberRole.MANAGER,
+        )
+    )
+    database_session.commit()
+
+    response = client.delete(
+        f"/api/v1/pets/{pet['id']}/photos/{photo['id']}",
+        headers={"Authorization": f"Bearer {manager_token}"},
+    )
+
+    assert response.status_code == 204
+    assert database_session.get(PetPhoto, UUID(photo["id"])) is None
+    assert len(fake_storage_client.delete_calls) == 1
+
+
+# Intent: verify staff members cannot delete pet photos.
+# Ensures: role authorization rejects deletion before database or storage changes.
+def test_staff_member_cannot_delete_pet_photo(
+    client: TestClient,
+    database_session: Session,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="staff-delete-owner@example.com",
+        display_name="Staff Delete Owner",
+    )
+
+    shelter = create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+    photo = upload_pet_photo_for_test(
+        client,
+        owner_token,
+        pet["id"],
+        filename="staff-protected.png",
+        alt_text="Luna protected from staff deletion.",
+    )
+
+    staff_user, staff_token = register_and_login_for_photo(
+        client,
+        email="delete-staff@example.com",
+        display_name="Delete Staff",
+    )
+
+    database_session.add(
+        ShelterMember(
+            shelter_id=UUID(shelter["id"]),
+            user_id=UUID(staff_user["id"]),
+            role=ShelterMemberRole.STAFF,
+        )
+    )
+    database_session.commit()
+
+    response = client.delete(
+        f"/api/v1/pets/{pet['id']}/photos/{photo['id']}",
+        headers={"Authorization": f"Bearer {staff_token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Shelter owner or manager access is required."}
+    assert database_session.get(PetPhoto, UUID(photo["id"])) is not None
+    assert fake_storage_client.delete_calls == []
+
+
+# Intent: verify adopters cannot delete pet photos.
+# Ensures: users without shelter membership cannot reach the deletion service.
+def test_user_without_shelter_cannot_delete_pet_photo(
+    client: TestClient,
+    database_session: Session,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="adopter-delete-owner@example.com",
+        display_name="Adopter Delete Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+    photo = upload_pet_photo_for_test(
+        client,
+        owner_token,
+        pet["id"],
+        filename="adopter-protected.png",
+        alt_text="Luna protected from adopter deletion.",
+    )
+
+    _, adopter_token = register_and_login_for_photo(
+        client,
+        email="delete-adopter@example.com",
+        display_name="Delete Adopter",
+    )
+
+    response = client.delete(
+        f"/api/v1/pets/{pet['id']}/photos/{photo['id']}",
+        headers={"Authorization": f"Bearer {adopter_token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "A shelter membership is required."}
+    assert database_session.get(PetPhoto, UUID(photo["id"])) is not None
+    assert fake_storage_client.delete_calls == []
+
+
+# Intent: verify shelter boundaries apply to deletion as well as upload.
+# Ensures: another shelter receives 404 and cannot discover or delete the photo.
+def test_shelter_cannot_delete_another_shelters_pet_photo(
+    client: TestClient,
+    database_session: Session,
+    fake_storage_client: FakeObjectStorageClient,
+) -> None:
+    _, first_owner_token = register_and_login_for_photo(
+        client,
+        email="first-delete-owner@example.com",
+        display_name="First Delete Owner",
+    )
+
+    create_shelter_for_photo(client, first_owner_token)
+    pet = create_pet_for_photo(client, first_owner_token)
+    photo = upload_pet_photo_for_test(
+        client,
+        first_owner_token,
+        pet["id"],
+        filename="cross-shelter.png",
+        alt_text="Luna belonging to the first shelter.",
+    )
+
+    _, second_owner_token = register_and_login_for_photo(
+        client,
+        email="second-delete-owner@example.com",
+        display_name="Second Delete Owner",
+    )
+
+    create_shelter_for_photo(
+        client,
+        second_owner_token,
+        name="Dallas Animal Rescue",
+        slug="dallas-delete-rescue",
+        email="delete@dallasrescue.org",
+    )
+
+    response = client.delete(
+        f"/api/v1/pets/{pet['id']}/photos/{photo['id']}",
+        headers={"Authorization": f"Bearer {second_owner_token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Pet photo not found."}
+    assert database_session.get(PetPhoto, UUID(photo["id"])) is not None
+    assert fake_storage_client.delete_calls == []
+
+
+# Intent: verify a MinIO cleanup failure does not restore public photo metadata.
+# Ensures: deletion remains successful and the inaccessible orphan is logged.
+def test_minio_failure_after_photo_deletion_is_logged(
+    client: TestClient,
+    database_session: Session,
+    fake_storage_client: FakeObjectStorageClient,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    _, owner_token = register_and_login_for_photo(
+        client,
+        email="cleanup-failure-owner@example.com",
+        display_name="Cleanup Failure Owner",
+    )
+
+    create_shelter_for_photo(client, owner_token)
+    pet = create_pet_for_photo(client, owner_token)
+    photo = upload_pet_photo_for_test(
+        client,
+        owner_token,
+        pet["id"],
+        filename="cleanup-failure.png",
+        alt_text="Luna with cleanup failure simulation.",
+    )
+
+    fake_storage_client.fail_delete = True
+    caplog.set_level(logging.ERROR, logger=pet_photos.__name__)
+
+    response = client.delete(
+        f"/api/v1/pets/{pet['id']}/photos/{photo['id']}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+
+    # Database deletion is authoritative; the private orphan is inaccessible
+    # and a later cleanup process can retry its removal.
+    assert response.status_code == 204
+    assert database_session.get(PetPhoto, UUID(photo["id"])) is None
+    assert len(fake_storage_client.delete_calls) == 1
+    assert "MinIO cleanup failed" in caplog.text

@@ -27,7 +27,6 @@ class Settings(BaseSettings):
     minio_region: str = "us-east-1"
     minio_use_ssl: bool = False
     max_pet_photo_upload_bytes: int = 5 * 1024 * 1024
-    minio_endpoint_url: str
     minio_public_endpoint_url: str
 
     # Keep URLs short-lived. The limits prevent accidentally creating

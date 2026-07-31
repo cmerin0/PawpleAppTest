@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import warnings
 from dataclasses import dataclass
 from io import BytesIO
@@ -14,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.storage import get_object_storage_client, get_public_object_storage_client
 from app.models.entities import Pet, PetPhoto, PetStatus
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidPetPhotoError(Exception):
@@ -38,6 +41,15 @@ class PublicPetNotFoundError(Exception):
 
     Using the same error for both cases prevents disclosing private draft,
     pending, adopted, or unavailable pet records.
+    """
+
+
+class ManagedPetPhotoNotFoundError(Exception):
+    """
+    Raised when the requested pet or photo does not belong to the shelter.
+
+    The same error is used for all ownership failures so callers cannot
+    discover information belonging to another shelter.
     """
 
 
@@ -251,3 +263,101 @@ def create_pet_photo_download_url(
         raise PetPhotoStorageError("A temporary photo URL could not be generated.")
 
     return download_url
+
+
+def delete_pet_photo(
+    database_session: Session,
+    *,
+    shelter_id: UUID,
+    pet_id: UUID,
+    photo_id: UUID,
+) -> None:
+    """
+    Delete a shelter-owned pet photo and normalize the remaining order.
+
+    The parent pet is locked because uploads and deletions both affect photo
+    ordering. This prevents concurrent requests from assigning conflicting
+    sort-order values.
+    """
+    owned_pet_id = database_session.scalar(
+        select(Pet.id)
+        .where(
+            Pet.id == pet_id,
+            Pet.shelter_id == shelter_id,
+        )
+        .with_for_update()
+    )
+
+    if owned_pet_id is None:
+        raise ManagedPetPhotoNotFoundError
+
+    photo = database_session.scalar(
+        select(PetPhoto)
+        .where(
+            PetPhoto.id == photo_id,
+            PetPhoto.pet_id == pet_id,
+        )
+        .with_for_update()
+    )
+
+    if photo is None:
+        raise ManagedPetPhotoNotFoundError
+
+    # Lock all remaining photos because their sort_order values may change.
+    remaining_photos = list(
+        database_session.scalars(
+            select(PetPhoto)
+            .where(
+                PetPhoto.pet_id == pet_id,
+                PetPhoto.id != photo_id,
+            )
+            .order_by(
+                PetPhoto.sort_order.asc(),
+                PetPhoto.created_at.asc(),
+                PetPhoto.id.asc(),
+            )
+            .with_for_update()
+        ).all()
+    )
+
+    # Save the key before deleting the ORM object. It will be needed for
+    # MinIO cleanup after the database transaction successfully commits.
+    object_key = photo.object_key
+
+    try:
+        database_session.delete(photo)
+
+        # Delete the row before reusing its sort_order value. This also helps
+        # prevent uniqueness conflicts if photo ordering is constrained later.
+        database_session.flush()
+
+        for new_sort_order, remaining_photo in enumerate(remaining_photos):
+            if remaining_photo.sort_order != new_sort_order:
+                remaining_photo.sort_order = new_sort_order
+
+        database_session.commit()
+    except SQLAlchemyError as error:
+        database_session.rollback()
+
+        # MinIO is untouched when the database transaction fails.
+        raise PetPhotoPersistenceError("The photo could not be deleted.") from error
+
+    try:
+        # The database no longer exposes this key, so deleting the private
+        # object now removes the remaining stored file.
+        get_object_storage_client().delete_object(
+            Bucket=settings.minio_bucket,
+            Key=object_key,
+        )
+    except (BotoCoreError, ClientError):
+        # The API deletion is still complete. Because the bucket is private
+        # and the database row is gone, the orphaned object is inaccessible.
+        # A future maintenance job can retry cleanup using this log entry.
+        logger.exception(
+            "Pet photo database record was deleted, but MinIO cleanup failed.",
+            extra={
+                "pet_id": str(pet_id),
+                "photo_id": str(photo_id),
+                "object_key": object_key,
+            },
+        )
